@@ -1,0 +1,9 @@
+[package]
+name = "pathlight-agent"
+version = "0.2.0"
+edition = "2021"
+description = "A local-first job search strategy workbench"
+license = "MIT"
+
+[dependencies]
+tauri = { version = "2", features = [] }

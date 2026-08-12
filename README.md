@@ -15,8 +15,9 @@ Pathlight helps a single job seeker turn a resume into a user-confirmed fact arc
 
 ## Stack
 
+- Desktop shell: Tauri 2
 - Frontend: Vue 3, TypeScript, Vite, Element Plus
-- Backend: FastAPI, Pydantic, SQLAlchemy
+- Backend: FastAPI, Pydantic, SQLAlchemy, domain-oriented services
 - Local storage: SQLite and local files
 - Resume parsing: PyMuPDF and python-docx
 
@@ -34,7 +35,7 @@ pip install -r requirements.txt
 uvicorn app.main:app --reload --port 8000
 ```
 
-In a second terminal, start the workbench:
+In a second terminal, start the workbench in a browser:
 
 ```powershell
 cd frontend
@@ -44,9 +45,29 @@ npm run dev
 
 Open `http://127.0.0.1:5173`.
 
+### Desktop development
+
+Pathlight now has a Tauri desktop shell. It reuses the existing Rust toolchain and
+keeps the project build artifacts in `frontend/src-tauri/target/` (ignored by Git).
+For this machine, the Cargo cache can remain on the D drive:
+
+```powershell
+cd frontend
+$env:CARGO_HOME = 'D:\dev-tools\cargo-home'
+$env:CARGO_TARGET_DIR = "$PWD\src-tauri\target"
+$env:npm_config_cache = 'D:\dev-tools\npm-cache'
+npm run tauri -- dev
+```
+
+Keep the FastAPI service above running while using the desktop shell. Packaging the
+Python API as a Tauri sidecar is the next milestone before a standalone installer.
+
 ## Quality check
 
 ```powershell
+cd backend
+.\.venv\Scripts\python.exe -B -m pytest tests -q
+
 cd frontend
 npm run build
 ```
@@ -58,6 +79,7 @@ backend/
   app/                 # FastAPI routes, persistence, and domain services
 frontend/
   src/                 # Vue workbench
+  src-tauri/           # Tauri desktop shell
 ```
 
 ## Product boundaries
@@ -69,6 +91,7 @@ frontend/
 
 ## Roadmap
 
+- Package the FastAPI service as a Tauri sidecar for a standalone local app.
 - Integrate structured LLM responses and streaming chat.
 - Add resume diagnosis, versioning, and stable PDF export.
 - Add a trace timeline and a richer application board.

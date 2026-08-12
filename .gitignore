@@ -16,6 +16,10 @@ backend/employ_agent.db
 frontend/node_modules/
 frontend/dist/
 frontend/.vite/
+output/playwright/
+
+# Tauri build output and local desktop bundles
+frontend/src-tauri/target/
 
 # Local resumes and personal application material
 resume/
