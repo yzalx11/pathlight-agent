@@ -1,0 +1,18 @@
+{
+  "scripts": {
+    "dev": "vite --host 127.0.0.1",
+    "build": "vue-tsc -b && vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "@vitejs/plugin-vue": "^6.0.1",
+    "element-plus": "^2.10.5",
+    "lucide-vue-next": "^0.468.0",
+    "vue": "^3.5.18"
+  },
+  "devDependencies": {
+    "typescript": "^5.9.2",
+    "vite": "^7.0.6",
+    "vue-tsc": "^3.0.4"
+  }
+}

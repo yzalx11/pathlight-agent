@@ -1,0 +1,21 @@
+.env
+.env.*
+!.env.example
+*.db
+*.sqlite
+__pycache__/
+*.py[cod]
+*.log
+*.tsbuildinfo
+
+backend/.venv/
+backend/data/
+backend/data/uploads/
+backend/employ_agent.db
+
+frontend/node_modules/
+frontend/dist/
+frontend/.vite/
+
+# Local resumes and personal application material
+resume/
