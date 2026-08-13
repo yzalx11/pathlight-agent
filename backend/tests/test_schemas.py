@@ -2,7 +2,7 @@ import pytest
 from fastapi.testclient import TestClient
 from pydantic import ValidationError
 
-from app.schemas import ApplicationPayload, ApplicationStatus, FactStatus, FactUpdate
+from app.schemas import ApplicationPayload, ApplicationStatus, FactStatus, FactUpdate, JobPayload, JobStatus
 from app.main import app
 
 
@@ -17,6 +17,9 @@ def test_domain_statuses_are_constrained() -> None:
     assert payload.status is FactStatus.CONFIRMED
     application = ApplicationPayload(company="Pathlight", position="Engineer", status="follow_up")
     assert application.status is ApplicationStatus.FOLLOW_UP
+    job = JobPayload(status="resume_sent", notes="等待对方确认")
+    assert job.status is JobStatus.RESUME_SENT
+    assert job.notes == "等待对方确认"
 
 
 def test_validation_errors_are_json_serializable() -> None:

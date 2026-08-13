@@ -4,7 +4,7 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session, selectinload
 
 from app.models import Application, Fact, Job, Preference, Resume, TraceRun
-from app.schemas import FactStatus
+from app.schemas import FactStatus, JobStatus
 
 
 def list_resumes(db: Session) -> Sequence[Resume]:
@@ -37,6 +37,25 @@ def get_job(db: Session, job_id: int) -> Job | None:
 
 def list_trace(db: Session, limit: int = 12) -> Sequence[TraceRun]:
     return db.scalars(select(TraceRun).order_by(TraceRun.created_at.desc()).limit(limit)).all()
+
+
+def list_action_jobs(db: Session, limit: int = 6) -> Sequence[Job]:
+    active_statuses = (
+        JobStatus.PENDING_REVIEW.value,
+        JobStatus.READY.value,
+        JobStatus.CONTACTED.value,
+        JobStatus.WAITING.value,
+        JobStatus.READ_NO_REPLY.value,
+        JobStatus.ASSESSMENT.value,
+        JobStatus.INTERVIEW.value,
+    )
+    statement = (
+        select(Job)
+        .where(Job.status.in_(active_statuses))
+        .order_by(Job.next_action_at.is_(None), Job.next_action_at.asc(), Job.updated_at.desc())
+        .limit(limit)
+    )
+    return db.scalars(statement).all()
 
 
 def dashboard_counts(db: Session) -> tuple[int, int, int, int]:

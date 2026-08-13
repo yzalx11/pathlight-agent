@@ -9,11 +9,13 @@ The detailed product workflow, platform boundaries, and development priorities l
 ## What it does today
 
 - Upload a PDF or DOCX resume and extract editable candidate facts.
+- Import up to eight BOSS job screenshots at once. OCR and original screenshots stay on this device, then become reviewable job drafts.
+- Track a job from review through communication, follow-up, interview, offer, rejection, or archive. The home screen keeps the next action visible.
 - Confirm, edit, or exclude facts before they are used in a match.
 - Save job-search preferences locally.
 - Paste a JD to get an explainable keyword-based match result, gaps, recommendation, and greeting draft.
 - Save application drafts and inspect lightweight task traces.
-- Store the optional DeepSeek API key in the operating system credential store rather than SQLite or source files.
+- Keep the optional DeepSeek API key outside SQLite and source files; local development reads it from the ignored `backend/.env` file.
 
 ## Stack
 

@@ -154,7 +154,11 @@ class JobStatus(StrEnum):
     READY = "ready"
     CONTACTED = "contacted"
     WAITING = "waiting"
-    REPLIED = "replied"
+    READ_NO_REPLY = "read_no_reply"
+    RESUME_SENT = "resume_sent"
+    ASSESSMENT = "assessment"
+    INTERVIEW = "interview"
+    OFFER = "offer"
     REJECTED = "rejected"
     ARCHIVED = "archived"
 
@@ -168,6 +172,8 @@ class JobPayload(PathlightModel):
     education: str = Field(default="", max_length=128)
     source_link: str = Field(default="", max_length=1_024)
     status: JobStatus = JobStatus.PENDING_REVIEW
+    next_action_at: datetime | None = None
+    notes: str = Field(default="", max_length=2_000)
     jd_text: str = Field(default="", max_length=20_000)
 
     @field_validator("source_link")
@@ -210,7 +216,17 @@ class DashboardRead(PathlightModel):
     facts_confirmed: int
     applications_total: int
     follow_up_total: int
+    action_items: list["ActionItemRead"] = Field(default_factory=list)
     recent_trace: list[TraceRead]
+
+
+class ActionItemRead(PathlightModel):
+    job_id: int
+    title: str
+    company: str
+    status: JobStatus
+    action: str
+    next_action_at: datetime | None = None
 
 
 class SavedResponse(PathlightModel):

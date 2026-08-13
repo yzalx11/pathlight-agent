@@ -72,6 +72,8 @@ class Job(Base):
     source: Mapped[str] = mapped_column(String(64), default="manual")
     source_link: Mapped[str] = mapped_column(String(1024), default="")
     status: Mapped[str] = mapped_column(String(64), default="pending_review")
+    next_action_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    notes: Mapped[str] = mapped_column(Text, default="")
     ocr_text: Mapped[str] = mapped_column(Text, default="")
     jd_text: Mapped[str] = mapped_column(Text, default="")
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)

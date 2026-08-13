@@ -40,10 +40,17 @@ type Fact = {
 
 type Resume = { id: number; filename: string; created_at: string; facts: Fact[] };
 type Trace = { run_id: string; task_type: string; status: string; summary: string; created_at: string };
-type Dashboard = { resumes_total: number; facts_confirmed: number; applications_total: number; follow_up_total: number; recent_trace: Trace[] };
+type Dashboard = {
+  resumes_total: number;
+  facts_confirmed: number;
+  applications_total: number;
+  follow_up_total: number;
+  action_items: Array<{ job_id: number; title: string; company: string; status: JobStatus; action: string; next_action_at: string | null }>;
+  recent_trace: Trace[];
+};
 type Application = { id: number; company: string; position: string; jd_link: string; resume_version: string; greeting: string; status: ApplicationStatus; notes: string; created_at: string };
 type ModelSettings = { has_api_key: boolean; llm_provider: string; model: string };
-type JobStatus = 'pending_review' | 'ready' | 'contacted' | 'waiting' | 'replied' | 'rejected' | 'archived';
+type JobStatus = 'pending_review' | 'ready' | 'contacted' | 'waiting' | 'read_no_reply' | 'resume_sent' | 'assessment' | 'interview' | 'offer' | 'rejected' | 'archived';
 type Job = {
   id: number;
   company: string;
@@ -55,6 +62,8 @@ type Job = {
   source: string;
   source_link: string;
   status: JobStatus;
+  next_action_at: string | null;
+  notes: string;
   ocr_text: string;
   jd_text: string;
   screenshots: Array<{ id: number; filename: string; ocr_text: string }>;
@@ -82,7 +91,7 @@ const currentView = ref<View>('overview');
 const loading = ref(false);
 const apiKey = ref('');
 const health = ref<ModelSettings>({ has_api_key: false, llm_provider: 'deepseek', model: 'deepseek-v4-flash' });
-const dashboard = ref<Dashboard>({ resumes_total: 0, facts_confirmed: 0, applications_total: 0, follow_up_total: 0, recent_trace: [] });
+const dashboard = ref<Dashboard>({ resumes_total: 0, facts_confirmed: 0, applications_total: 0, follow_up_total: 0, action_items: [], recent_trace: [] });
 const resumes = ref<Resume[]>([]);
 const selectedResumeId = ref<number | null>(null);
 const applications = ref<Application[]>([]);
@@ -93,7 +102,7 @@ const jdText = ref('');
 const matchResult = ref<MatchResult | null>(null);
 const preferences = ref({ role_direction: '', cities: '', salary_floor: '', industries: '', work_mode: '', notes: '' });
 const applicationDraft = ref({ company: '', position: '', jd_link: '', status: 'draft' as ApplicationStatus, notes: '' });
-const jobDraft = ref({ company: '', title: '', city: '', salary: '', experience: '', education: '', source_link: '', status: 'pending_review' as JobStatus, jd_text: '' });
+const jobDraft = ref({ company: '', title: '', city: '', salary: '', experience: '', education: '', source_link: '', status: 'pending_review' as JobStatus, next_action_at: null as string | null, notes: '', jd_text: '' });
 
 const selectedResume = computed(() => resumes.value.find((resume) => resume.id === selectedResumeId.value));
 const selectedJob = computed(() => jobs.value.find((job) => job.id === selectedJobId.value));
@@ -199,6 +208,8 @@ async function uploadJobScreenshots(files: File[]) {
       education: job.education,
       source_link: job.source_link,
       status: job.status,
+      next_action_at: job.next_action_at,
+      notes: job.notes,
       jd_text: job.jd_text,
     };
     jdText.value = job.jd_text;
@@ -235,6 +246,8 @@ function loadJobDraft(jobId: number | null) {
     education: job.education,
     source_link: job.source_link,
     status: job.status,
+    next_action_at: job.next_action_at,
+    notes: job.notes,
     jd_text: job.jd_text,
   };
   jdText.value = job.jd_text;
@@ -242,6 +255,12 @@ function loadJobDraft(jobId: number | null) {
   applicationDraft.value.position = job.title;
   applicationDraft.value.jd_link = job.source_link;
   matchResult.value = null;
+}
+
+function openJobFromAction(jobId: number) {
+  selectedJobId.value = jobId;
+  loadJobDraft(jobId);
+  currentView.value = 'analysis';
 }
 
 async function saveJobDraft() {
@@ -370,25 +389,38 @@ onMounted(refresh);
         <section v-if="currentView === 'overview'" class="view-stack overview">
           <section class="hero-panel">
             <div class="hero-copy">
-              <p class="eyebrow">下一步</p>
-              <h2>{{ currentStep === 1 ? '先导入一份简历' : currentStep === 2 ? '确认你的候选事实' : currentStep === 3 ? '粘贴一个岗位 JD' : '把分析结果转为投递行动' }}</h2>
-              <p>{{ currentStep === 1 ? 'Pathlight 会先将简历沉淀为可编辑、可确认的事实档案。' : currentStep === 2 ? `已选简历中有 ${selectedResume?.facts.length ?? 0} 条候选事实，确认后将优先作为分析依据。` : currentStep === 3 ? '准备好岗位职责和要求后，分析会给出证据化匹配、缺口和沟通草稿。' : '你已具备完整的本地工作流，可以保存草稿并继续跟进。' }}</p>
-              <el-button type="primary" :icon="currentStep === 1 ? Upload : currentStep === 2 ? Check : currentStep === 3 ? Send : BriefcaseBusiness" @click="openView(currentStep === 1 || currentStep === 2 ? 'profile' : currentStep === 3 ? 'analysis' : 'applications')">
-                {{ currentStep === 1 ? '导入简历' : currentStep === 2 ? '确认事实' : currentStep === 3 ? '开始分析' : '查看投递记录' }}
+              <p class="eyebrow">今天的焦点</p>
+              <h2>{{ currentStep === 1 ? '先建立可信的简历事实档案' : currentStep === 2 ? '确认可用于沟通的真实经历' : currentStep === 3 ? '导入一个想了解的职位' : '将你的研判转化为下一步行动' }}</h2>
+              <p>{{ currentStep === 1 ? '从一份 PDF 或 DOCX 开始。Pathlight 只会使用由你确认过的事实。' : currentStep === 2 ? `当前简历有 ${selectedResume?.facts.length ?? 0} 条候选事实，确认后才会成为匹配与沟通的依据。` : currentStep === 3 ? '粘贴 JD，或一次导入多张 BOSS 职位截图。识别结果始终可先校对。' : '岗位洞察、沟通草稿和本地投递记录已经连成闭环。' }}</p>
+              <el-button type="primary" size="large" :icon="currentStep === 1 ? Upload : currentStep === 2 ? Check : currentStep === 3 ? Send : BriefcaseBusiness" @click="openView(currentStep === 1 || currentStep === 2 ? 'profile' : currentStep === 3 ? 'analysis' : 'applications')">
+                {{ currentStep === 1 ? '导入简历' : currentStep === 2 ? '确认事实' : currentStep === 3 ? '导入职位' : '查看投递记录' }}
               </el-button>
             </div>
-            <ol class="workflow-steps">
-              <li v-for="(label, index) in ['导入简历', '确认事实', '分析岗位', '保存投递']" :key="label" :class="{ done: currentStep > index + 1, current: currentStep === index + 1 }">
-                <span>{{ index + 1 }}</span>{{ label }}
+            <ol class="workflow-steps" aria-label="求职工作流">
+              <li v-for="(label, index) in ['简历', '事实', '职位', '行动']" :key="label" :class="{ done: currentStep > index + 1, current: currentStep === index + 1 }">
+                <span>{{ index + 1 }}</span><strong>{{ label }}</strong>
               </li>
             </ol>
           </section>
 
           <section class="metric-grid" aria-label="本地数据概览">
-            <article class="metric"><span>简历</span><strong>{{ dashboard.resumes_total }}</strong><small>本地版本</small></article>
-            <article class="metric"><span>已确认事实</span><strong>{{ dashboard.facts_confirmed }}</strong><small>可作为证据</small></article>
-            <article class="metric"><span>投递记录</span><strong>{{ dashboard.applications_total }}</strong><small>持续跟踪</small></article>
+            <article class="metric"><span>简历版本</span><strong>{{ dashboard.resumes_total }}</strong><small>本地保存</small></article>
+            <article class="metric"><span>已确认事实</span><strong>{{ dashboard.facts_confirmed }}</strong><small>可引用证据</small></article>
+            <article class="metric"><span>职位草稿</span><strong>{{ jobs.length }}</strong><small>待研判或跟进</small></article>
             <article class="metric"><span>待跟进</span><strong>{{ dashboard.follow_up_total }}</strong><small>需要行动</small></article>
+          </section>
+
+          <section class="surface action-queue">
+            <div class="section-heading"><div><p class="eyebrow">NEXT ACTIONS</p><h2>现在处理什么</h2><p>只显示需要你确认、沟通或准备的职位。</p></div><BriefcaseBusiness :size="19" /></div>
+            <div v-if="dashboard.action_items.length" class="action-list">
+              <button v-for="item in dashboard.action_items" :key="item.job_id" class="action-item" @click="openJobFromAction(item.job_id)">
+                <span class="action-status">{{ item.action }}</span>
+                <span class="action-main"><strong>{{ item.title }}</strong><small>{{ item.company }}</small></span>
+                <span class="action-date">{{ item.next_action_at ? new Date(item.next_action_at).toLocaleDateString('zh-CN', { month: 'numeric', day: 'numeric' }) : '待安排' }}</span>
+                <ArrowUpRight :size="16" />
+              </button>
+            </div>
+            <el-empty v-else description="导入并校对职位后，需要处理的事项会显示在这里。" :image-size="62" />
           </section>
 
           <section class="content-grid overview-grid">
@@ -429,7 +461,7 @@ onMounted(refresh);
               <el-input v-model="jdText" type="textarea" :rows="13" placeholder="粘贴岗位职责、任职要求、加分项等内容" />
               <div class="analysis-actions"><span>{{ selectedResume ? `使用：${selectedResume.filename}` : '请先选择一份简历' }}</span><el-button type="primary" :icon="Send" :loading="loading" :disabled="!selectedResumeId || jdText.length < 10" @click="runMatch">分析岗位</el-button></div>
             </article>
-            <article class="surface analysis-guide"><p class="eyebrow">JOB DRAFT</p><h2>确认职位信息</h2><div class="job-draft-fields"><el-input v-model="jobDraft.title" placeholder="岗位名称" /><el-input v-model="jobDraft.company" placeholder="公司名称（可稍后补充）" /><el-input v-model="jobDraft.city" placeholder="城市" /><el-input v-model="jobDraft.salary" placeholder="薪资" /><el-input v-model="jobDraft.experience" placeholder="经验要求" /><el-input v-model="jobDraft.education" placeholder="学历要求" /></div><el-button v-if="selectedJob" :icon="Save" :loading="loading" @click="saveJobDraft">保存职位草稿</el-button><p class="guide-note">截图只在本机 OCR。搜索列表截图可能带入相邻职位，请校对后再分析。</p></article>
+            <article class="surface analysis-guide"><p class="eyebrow">JOB DRAFT</p><h2>确认职位信息</h2><div class="job-draft-fields"><el-input v-model="jobDraft.title" placeholder="岗位名称" /><el-input v-model="jobDraft.company" placeholder="公司名称（可稍后补充）" /><el-input v-model="jobDraft.city" placeholder="城市" /><el-input v-model="jobDraft.salary" placeholder="薪资" /><el-input v-model="jobDraft.experience" placeholder="经验要求" /><el-input v-model="jobDraft.education" placeholder="学历要求" /><el-select v-model="jobDraft.status" placeholder="当前状态"><el-option label="待确认" value="pending_review" /><el-option label="可沟通" value="ready" /><el-option label="沟通中" value="contacted" /><el-option label="已沟通待回复" value="waiting" /><el-option label="已读未回" value="read_no_reply" /><el-option label="已发简历" value="resume_sent" /><el-option label="笔试 / 作业" value="assessment" /><el-option label="面试中" value="interview" /><el-option label="Offer" value="offer" /><el-option label="不合适" value="rejected" /><el-option label="归档" value="archived" /></el-select><el-date-picker v-model="jobDraft.next_action_at" type="date" value-format="YYYY-MM-DDTHH:mm:ss" placeholder="下一步日期" /></div><el-input v-model="jobDraft.notes" type="textarea" :rows="3" placeholder="这份职位的关键信息、沟通记录或下一步安排" /><el-button v-if="selectedJob" :icon="Save" :loading="loading" @click="saveJobDraft">保存职位草稿</el-button><p class="guide-note">截图只在本机 OCR。搜索列表截图可能带入相邻职位，请校对后再分析。</p></article>
           </section>
           <section v-if="matchResult" class="match-report">
             <header class="report-hero"><div><p class="eyebrow">MATCH REPORT</p><h2>{{ matchResult.recommendation }}</h2><p>{{ matchResult.reason }}</p></div><div class="score-ring"><strong>{{ matchResult.score }}</strong><span>匹配度</span></div></header>
