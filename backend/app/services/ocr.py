@@ -50,3 +50,18 @@ async def extract_job_screenshot(file: UploadFile) -> dict[str, int | str]:
             detail="Too little readable text was found. Please use a clearer screenshot.",
         )
     return {"text": text, "lines_detected": len(lines)}
+
+
+def extract_text_from_path(path: Path) -> str:
+    try:
+        result = _get_ocr()(str(path))
+    except Exception as exc:
+        raise HTTPException(status_code=422, detail="Unable to read text from screenshot.") from exc
+    lines = [str(text).strip() for text in (result.txts if result else ()) if str(text).strip()]
+    text = "\n".join(lines)
+    if len(text) < 10:
+        raise HTTPException(
+            status_code=422,
+            detail="Too little readable text was found. Please use a clearer screenshot.",
+        )
+    return text

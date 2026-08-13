@@ -149,6 +149,54 @@ class ApplicationRead(ApplicationPayload):
     model_config = ConfigDict(from_attributes=True)
 
 
+class JobStatus(StrEnum):
+    PENDING_REVIEW = "pending_review"
+    READY = "ready"
+    CONTACTED = "contacted"
+    WAITING = "waiting"
+    REPLIED = "replied"
+    REJECTED = "rejected"
+    ARCHIVED = "archived"
+
+
+class JobPayload(PathlightModel):
+    company: str = Field(default="", max_length=255)
+    title: str = Field(default="", max_length=255)
+    city: str = Field(default="", max_length=128)
+    salary: str = Field(default="", max_length=128)
+    experience: str = Field(default="", max_length=128)
+    education: str = Field(default="", max_length=128)
+    source_link: str = Field(default="", max_length=1_024)
+    status: JobStatus = JobStatus.PENDING_REVIEW
+    jd_text: str = Field(default="", max_length=20_000)
+
+    @field_validator("source_link")
+    @classmethod
+    def validate_source_link(cls, value: str) -> str:
+        if value and not value.startswith(("http://", "https://")):
+            raise ValueError("Source link must start with http:// or https://")
+        return value
+
+
+class JobScreenshotRead(PathlightModel):
+    id: int
+    filename: str
+    ocr_text: str
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class JobRead(JobPayload):
+    id: int
+    source: str
+    ocr_text: str
+    created_at: datetime
+    updated_at: datetime
+    screenshots: list[JobScreenshotRead] = Field(default_factory=list)
+
+    model_config = ConfigDict(from_attributes=True)
+
+
 class TraceRead(PathlightModel):
     run_id: str
     task_type: str

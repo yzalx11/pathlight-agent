@@ -43,6 +43,22 @@ type Trace = { run_id: string; task_type: string; status: string; summary: strin
 type Dashboard = { resumes_total: number; facts_confirmed: number; applications_total: number; follow_up_total: number; recent_trace: Trace[] };
 type Application = { id: number; company: string; position: string; jd_link: string; resume_version: string; greeting: string; status: ApplicationStatus; notes: string; created_at: string };
 type ModelSettings = { has_api_key: boolean; llm_provider: string; model: string };
+type JobStatus = 'pending_review' | 'ready' | 'contacted' | 'waiting' | 'replied' | 'rejected' | 'archived';
+type Job = {
+  id: number;
+  company: string;
+  title: string;
+  city: string;
+  salary: string;
+  experience: string;
+  education: string;
+  source: string;
+  source_link: string;
+  status: JobStatus;
+  ocr_text: string;
+  jd_text: string;
+  screenshots: Array<{ id: number; filename: string; ocr_text: string }>;
+};
 type MatchResult = {
   jd: { title_hint: string; confidence: string; keywords: string[]; responsibilities: string[]; requirements: string[] };
   score: number;
@@ -70,12 +86,17 @@ const dashboard = ref<Dashboard>({ resumes_total: 0, facts_confirmed: 0, applica
 const resumes = ref<Resume[]>([]);
 const selectedResumeId = ref<number | null>(null);
 const applications = ref<Application[]>([]);
+const jobs = ref<Job[]>([]);
+const selectedJobId = ref<number | null>(null);
+const jobScreenshotFiles = ref<UploadFile[]>([]);
 const jdText = ref('');
 const matchResult = ref<MatchResult | null>(null);
 const preferences = ref({ role_direction: '', cities: '', salary_floor: '', industries: '', work_mode: '', notes: '' });
 const applicationDraft = ref({ company: '', position: '', jd_link: '', status: 'draft' as ApplicationStatus, notes: '' });
+const jobDraft = ref({ company: '', title: '', city: '', salary: '', experience: '', education: '', source_link: '', status: 'pending_review' as JobStatus, jd_text: '' });
 
 const selectedResume = computed(() => resumes.value.find((resume) => resume.id === selectedResumeId.value));
+const selectedJob = computed(() => jobs.value.find((job) => job.id === selectedJobId.value));
 const confirmedFacts = computed(() => selectedResume.value?.facts.filter((fact) => fact.status === 'confirmed').length ?? 0);
 const currentStep = computed(() => {
   if (!selectedResume.value) return 1;
@@ -103,17 +124,19 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
 
 async function refresh() {
   try {
-    const [settings, dashboardData, resumeData, applicationData, preferenceData] = await Promise.all([
+    const [settings, dashboardData, resumeData, applicationData, jobData, preferenceData] = await Promise.all([
       request<typeof health.value>('/settings'),
       request<Dashboard>('/dashboard'),
       request<Resume[]>('/resumes'),
       request<Application[]>('/applications'),
+      request<Job[]>('/jobs'),
       request<typeof preferences.value>('/preferences'),
     ]);
     health.value = settings;
     dashboard.value = dashboardData;
     resumes.value = resumeData;
     applications.value = applicationData;
+    jobs.value = jobData;
     preferences.value = preferenceData;
     selectedResumeId.value = selectedResumeId.value ?? resumeData[0]?.id ?? null;
   } catch (error) {
@@ -159,15 +182,28 @@ function handleResumeChange(uploadFile: UploadFile) {
   if (uploadFile.raw) uploadResume(uploadFile.raw);
 }
 
-async function uploadJobScreenshot(file: File) {
+async function uploadJobScreenshots(files: File[]) {
   loading.value = true;
   try {
     const form = new FormData();
-    form.append('file', file);
-    const result = await request<{ text: string; lines_detected: number }>('/jd/ocr', { method: 'POST', body: form });
-    jdText.value = result.text;
+    files.forEach((file) => form.append('files', file));
+    const job = await request<Job>('/jobs/import-screenshots', { method: 'POST', body: form });
+    await refresh();
+    selectedJobId.value = job.id;
+    jobDraft.value = {
+      company: job.company,
+      title: job.title,
+      city: job.city,
+      salary: job.salary,
+      experience: job.experience,
+      education: job.education,
+      source_link: job.source_link,
+      status: job.status,
+      jd_text: job.jd_text,
+    };
+    jdText.value = job.jd_text;
     matchResult.value = null;
-    ElMessage.success(`已识别 ${result.lines_detected} 行文字，请检查后分析。`);
+    ElMessage.success(`已导入 ${job.screenshots.length} 张截图，请确认职位信息。`);
   } catch (error) {
     ElMessage.error(error instanceof Error ? error.message : '截图识别失败。');
   } finally {
@@ -175,8 +211,56 @@ async function uploadJobScreenshot(file: File) {
   }
 }
 
-function handleJobScreenshotChange(uploadFile: UploadFile) {
-  if (uploadFile.raw) uploadJobScreenshot(uploadFile.raw);
+function handleJobScreenshotChange(_: UploadFile, uploadFiles: UploadFile[]) {
+  jobScreenshotFiles.value = uploadFiles;
+}
+
+function importSelectedJobScreenshots() {
+  const files: File[] = [];
+  for (const uploadFile of jobScreenshotFiles.value) {
+    if (uploadFile.raw) files.push(uploadFile.raw);
+  }
+  if (files.length) uploadJobScreenshots(files);
+}
+
+function loadJobDraft(jobId: number | null) {
+  const job = jobs.value.find((item) => item.id === jobId);
+  if (!job) return;
+  jobDraft.value = {
+    company: job.company,
+    title: job.title,
+    city: job.city,
+    salary: job.salary,
+    experience: job.experience,
+    education: job.education,
+    source_link: job.source_link,
+    status: job.status,
+    jd_text: job.jd_text,
+  };
+  jdText.value = job.jd_text;
+  applicationDraft.value.company = job.company;
+  applicationDraft.value.position = job.title;
+  applicationDraft.value.jd_link = job.source_link;
+  matchResult.value = null;
+}
+
+async function saveJobDraft() {
+  if (!selectedJobId.value) return;
+  loading.value = true;
+  try {
+    const job = await request<Job>(`/jobs/${selectedJobId.value}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(jobDraft.value),
+    });
+    jdText.value = job.jd_text;
+    await refresh();
+    ElMessage.success('职位草稿已保存。');
+  } catch (error) {
+    ElMessage.error(error instanceof Error ? error.message : '保存职位失败。');
+  } finally {
+    loading.value = false;
+  }
 }
 
 async function saveFact(fact: Fact, status = fact.status) {
@@ -204,6 +288,14 @@ async function runMatch() {
   if (!selectedResumeId.value || jdText.value.length < 10) return;
   loading.value = true;
   try {
+    jobDraft.value.jd_text = jdText.value;
+    if (selectedJobId.value) {
+      await request<Job>(`/jobs/${selectedJobId.value}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(jobDraft.value),
+      });
+    }
     const result = await request<MatchResult>('/matches', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ resume_id: selectedResumeId.value, jd_text: jdText.value }) });
     matchResult.value = result;
     applicationDraft.value.notes = result.recommendation;
@@ -326,13 +418,18 @@ onMounted(refresh);
           <section class="content-grid analysis-entry">
             <article class="surface jd-surface">
               <div class="section-heading"><div><p class="eyebrow">JOB DESCRIPTION</p><h2>导入或粘贴岗位原文</h2><p>可上传职位截图，本地 OCR 后再由你检查和分析。</p></div><ClipboardCheck :size="19" /></div>
-              <el-upload class="job-screenshot-upload" :auto-upload="false" :show-file-list="false" accept=".png,.jpg,.jpeg,.webp" :on-change="handleJobScreenshotChange">
-                <el-button :icon="Upload" :loading="loading">导入职位截图</el-button>
+              <el-select v-if="jobs.length" v-model="selectedJobId" class="job-select" placeholder="选择已导入职位" @change="loadJobDraft">
+                <el-option v-for="job in jobs" :key="job.id" :label="`${job.title || '未命名职位'} · ${job.company || '待确认公司'}`" :value="job.id" />
+              </el-select>
+              <el-upload class="job-screenshot-upload" :auto-upload="false" :show-file-list="true" multiple accept=".png,.jpg,.jpeg,.webp" :on-change="handleJobScreenshotChange">
+                <el-button :icon="Upload" :loading="loading">导入 BOSS 职位截图</el-button>
               </el-upload>
+              <el-button v-if="jobScreenshotFiles.length" class="job-import-button" :loading="loading" @click="importSelectedJobScreenshots">识别 {{ jobScreenshotFiles.length }} 张截图</el-button>
+              <div v-if="selectedJob" class="job-draft-banner"><span>已创建职位草稿 · {{ selectedJob.screenshots.length }} 张截图</span><span>{{ selectedJob.source === 'boss_screenshot' ? 'BOSS 截图导入' : '手动导入' }}</span></div>
               <el-input v-model="jdText" type="textarea" :rows="13" placeholder="粘贴岗位职责、任职要求、加分项等内容" />
               <div class="analysis-actions"><span>{{ selectedResume ? `使用：${selectedResume.filename}` : '请先选择一份简历' }}</span><el-button type="primary" :icon="Send" :loading="loading" :disabled="!selectedResumeId || jdText.length < 10" @click="runMatch">分析岗位</el-button></div>
             </article>
-            <article class="surface analysis-guide"><p class="eyebrow">HOW IT WORKS</p><h2>证据优先，而非猜测</h2><ol><li>解析 JD 的关键词与要求。</li><li>映射到已确认的简历事实。</li><li>展示缺口、偏好冲突与投递建议。</li></ol><p class="guide-note">截图仅在本机 OCR；请在分析前校对识别文本。</p></article>
+            <article class="surface analysis-guide"><p class="eyebrow">JOB DRAFT</p><h2>确认职位信息</h2><div class="job-draft-fields"><el-input v-model="jobDraft.title" placeholder="岗位名称" /><el-input v-model="jobDraft.company" placeholder="公司名称（可稍后补充）" /><el-input v-model="jobDraft.city" placeholder="城市" /><el-input v-model="jobDraft.salary" placeholder="薪资" /><el-input v-model="jobDraft.experience" placeholder="经验要求" /><el-input v-model="jobDraft.education" placeholder="学历要求" /></div><el-button v-if="selectedJob" :icon="Save" :loading="loading" @click="saveJobDraft">保存职位草稿</el-button><p class="guide-note">截图只在本机 OCR。搜索列表截图可能带入相邻职位，请校对后再分析。</p></article>
           </section>
           <section v-if="matchResult" class="match-report">
             <header class="report-hero"><div><p class="eyebrow">MATCH REPORT</p><h2>{{ matchResult.recommendation }}</h2><p>{{ matchResult.reason }}</p></div><div class="score-ring"><strong>{{ matchResult.score }}</strong><span>匹配度</span></div></header>

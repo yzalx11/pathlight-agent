@@ -59,6 +59,44 @@ class Application(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
 
+class Job(Base):
+    __tablename__ = "jobs"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    company: Mapped[str] = mapped_column(String(255), default="")
+    title: Mapped[str] = mapped_column(String(255), default="")
+    city: Mapped[str] = mapped_column(String(128), default="")
+    salary: Mapped[str] = mapped_column(String(128), default="")
+    experience: Mapped[str] = mapped_column(String(128), default="")
+    education: Mapped[str] = mapped_column(String(128), default="")
+    source: Mapped[str] = mapped_column(String(64), default="manual")
+    source_link: Mapped[str] = mapped_column(String(1024), default="")
+    status: Mapped[str] = mapped_column(String(64), default="pending_review")
+    ocr_text: Mapped[str] = mapped_column(Text, default="")
+    jd_text: Mapped[str] = mapped_column(Text, default="")
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime, default=datetime.utcnow, onupdate=datetime.utcnow
+    )
+
+    screenshots: Mapped[list["JobScreenshot"]] = relationship(
+        back_populates="job", cascade="all, delete-orphan"
+    )
+
+
+class JobScreenshot(Base):
+    __tablename__ = "job_screenshots"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    job_id: Mapped[int] = mapped_column(ForeignKey("jobs.id"))
+    filename: Mapped[str] = mapped_column(String(255))
+    storage_path: Mapped[str] = mapped_column(String(1024))
+    ocr_text: Mapped[str] = mapped_column(Text, default="")
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+    job: Mapped[Job] = relationship(back_populates="screenshots")
+
+
 class TraceRun(Base):
     __tablename__ = "trace_runs"
 

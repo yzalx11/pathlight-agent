@@ -3,7 +3,7 @@ from collections.abc import Sequence
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session, selectinload
 
-from app.models import Application, Fact, Preference, Resume, TraceRun
+from app.models import Application, Fact, Job, Preference, Resume, TraceRun
 from app.schemas import FactStatus
 
 
@@ -23,6 +23,16 @@ def get_preference(db: Session) -> Preference | None:
 
 def list_applications(db: Session) -> Sequence[Application]:
     return db.scalars(select(Application).order_by(Application.created_at.desc())).all()
+
+
+def list_jobs(db: Session) -> Sequence[Job]:
+    statement = select(Job).options(selectinload(Job.screenshots)).order_by(Job.created_at.desc())
+    return db.scalars(statement).all()
+
+
+def get_job(db: Session, job_id: int) -> Job | None:
+    statement = select(Job).options(selectinload(Job.screenshots)).where(Job.id == job_id)
+    return db.scalar(statement)
 
 
 def list_trace(db: Session, limit: int = 12) -> Sequence[TraceRun]:
