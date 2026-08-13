@@ -373,11 +373,12 @@ onMounted(refresh);
 
     <section class="app-main">
       <header class="app-header">
-        <div>
-          <p class="eyebrow">LOCAL-FIRST CAREER STRATEGY</p>
+        <div class="header-title">
+          <p class="eyebrow">WORKSPACE</p>
           <h1>{{ ({ overview: '今天的求职工作', profile: '简历与事实档案', analysis: '岗位分析', applications: '投递记录', settings: '本地设置' } as const)[currentView] }}</h1>
         </div>
         <div class="header-actions">
+          <span v-if="currentView !== 'settings'" class="toolbar-status"><span :class="['status-dot', { ready: health.has_api_key }]" />{{ health.has_api_key ? '模型已就绪' : '仅本地模式' }}</span>
           <el-select v-if="currentView !== 'settings'" v-model="selectedResumeId" class="resume-select" placeholder="选择简历">
             <el-option v-for="resume in resumes" :key="resume.id" :label="resume.filename" :value="resume.id" />
           </el-select>
@@ -389,7 +390,7 @@ onMounted(refresh);
         <section v-if="currentView === 'overview'" class="view-stack overview">
           <section class="hero-panel">
             <div class="hero-copy">
-              <p class="eyebrow">今天的焦点</p>
+              <p class="eyebrow">TODAY</p>
               <h2>{{ currentStep === 1 ? '先建立可信的简历事实档案' : currentStep === 2 ? '确认可用于沟通的真实经历' : currentStep === 3 ? '导入一个想了解的职位' : '将你的研判转化为下一步行动' }}</h2>
               <p>{{ currentStep === 1 ? '从一份 PDF 或 DOCX 开始。Pathlight 只会使用由你确认过的事实。' : currentStep === 2 ? `当前简历有 ${selectedResume?.facts.length ?? 0} 条候选事实，确认后才会成为匹配与沟通的依据。` : currentStep === 3 ? '粘贴 JD，或一次导入多张 BOSS 职位截图。识别结果始终可先校对。' : '岗位洞察、沟通草稿和本地投递记录已经连成闭环。' }}</p>
               <el-button type="primary" size="large" :icon="currentStep === 1 ? Upload : currentStep === 2 ? Check : currentStep === 3 ? Send : BriefcaseBusiness" @click="openView(currentStep === 1 || currentStep === 2 ? 'profile' : currentStep === 3 ? 'analysis' : 'applications')">
