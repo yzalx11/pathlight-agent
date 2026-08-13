@@ -63,8 +63,16 @@ $env:npm_config_cache = 'D:\dev-tools\npm-cache'
 npm run tauri -- dev
 ```
 
-Keep the FastAPI service above running while using the desktop shell. Packaging the
-Python API as a Tauri sidecar is the next milestone before a standalone installer.
+For the desktop shell, build the Windows API sidecar once before starting it:
+
+```powershell
+cd backend
+.\scripts\build-sidecar.ps1
+```
+
+The packaged API starts with the desktop app on `127.0.0.1:8001` (the browser
+development API continues to use `8000`), stores SQLite/uploads under the operating
+system's Pathlight app-data directory, and is stopped when the desktop app exits.
 
 ## Quality check
 
@@ -95,7 +103,7 @@ frontend/
 
 ## Roadmap
 
-- Package the FastAPI service as a Tauri sidecar for a standalone local app.
+- Refine desktop startup, shutdown, upgrades, and Windows installer validation.
 - Integrate structured LLM responses and streaming chat.
 - Add resume diagnosis, versioning, and stable PDF export.
 - Add a trace timeline and a richer application board.

@@ -7,7 +7,12 @@ class Settings(BaseSettings):
     app_name: str = "Pathlight Agent"
     database_url: str = "sqlite:///./employ_agent.db"
     upload_dir: Path = Path("./data/uploads")
-    cors_origins: list[str] = ["http://localhost:5173", "http://127.0.0.1:5173"]
+    cors_origins: list[str] = [
+        "http://localhost:5173",
+        "http://127.0.0.1:5173",
+        "http://tauri.localhost",
+        "https://tauri.localhost",
+    ]
     max_upload_size_bytes: int = 10 * 1024 * 1024
     llm_provider: str = "deepseek"
     deepseek_api_key: str = ""

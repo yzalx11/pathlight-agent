@@ -24,7 +24,8 @@ import {
 } from 'lucide-vue-next';
 import AgentDock from './components/ui/AgentDock.vue';
 
-const API_BASE = 'http://127.0.0.1:8000/api';
+const desktopMode = '__TAURI_INTERNALS__' in window;
+const API_BASE = `http://127.0.0.1:${desktopMode ? '8001' : '8000'}/api`;
 
 type View = 'overview' | 'profile' | 'analysis' | 'applications' | 'settings';
 type FactStatus = 'candidate' | 'confirmed' | 'rejected';
@@ -107,6 +108,7 @@ const jobDraft = ref({ company: '', title: '', city: '', salary: '', experience:
 const pipoGradient = ref('');
 let pipoFrame = 0;
 let pipoStartedAt = 0;
+let desktopConnectionAttempts = 0;
 
 const selectedResume = computed(() => resumes.value.find((resume) => resume.id === selectedResumeId.value));
 const selectedJob = computed(() => jobs.value.find((job) => job.id === selectedJobId.value));
@@ -153,6 +155,11 @@ async function refresh() {
     preferences.value = preferenceData;
     selectedResumeId.value = selectedResumeId.value ?? resumeData[0]?.id ?? null;
   } catch (error) {
+    if (desktopMode && desktopConnectionAttempts < 5) {
+      desktopConnectionAttempts += 1;
+      window.setTimeout(() => void refresh(), 500);
+      return;
+    }
     ElMessage.error(error instanceof Error ? error.message : '无法连接本地服务。');
   }
 }

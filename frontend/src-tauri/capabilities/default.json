@@ -3,5 +3,5 @@
   "identifier": "main-window",
   "description": "Minimum permissions for the Pathlight desktop window.",
   "windows": ["main"],
-  "permissions": ["core:default"]
+  "permissions": ["core:default", "shell:allow-spawn"]
 }

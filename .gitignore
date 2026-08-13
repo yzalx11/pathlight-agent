@@ -21,6 +21,14 @@ output/playwright/
 
 # Tauri build output and local desktop bundles
 frontend/src-tauri/target/
+frontend/src-tauri/binaries/
+frontend/src-tauri/.sidecar-check/
+backend/.pyinstaller/
+frontend/src-tauri/gen/
+frontend/src-tauri/icons/android/
+frontend/src-tauri/icons/ios/
+frontend/src-tauri/icons/*.png
+frontend/src-tauri/icons/*.icns
 
 # Local resumes and personal application material
 resume/

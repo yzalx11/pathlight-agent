@@ -7,3 +7,7 @@ license = "MIT"
 
 [dependencies]
 tauri = { version = "2", features = [] }
+tauri-plugin-shell = "2"
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
