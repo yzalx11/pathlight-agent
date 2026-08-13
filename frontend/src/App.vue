@@ -42,6 +42,7 @@ type Resume = { id: number; filename: string; created_at: string; facts: Fact[] 
 type Trace = { run_id: string; task_type: string; status: string; summary: string; created_at: string };
 type Dashboard = { resumes_total: number; facts_confirmed: number; applications_total: number; follow_up_total: number; recent_trace: Trace[] };
 type Application = { id: number; company: string; position: string; jd_link: string; resume_version: string; greeting: string; status: ApplicationStatus; notes: string; created_at: string };
+type ModelSettings = { has_api_key: boolean; llm_provider: string; model: string };
 type MatchResult = {
   jd: { title_hint: string; confidence: string; keywords: string[]; responsibilities: string[]; requirements: string[] };
   score: number;
@@ -57,7 +58,7 @@ type MatchResult = {
 const currentView = ref<View>('overview');
 const loading = ref(false);
 const apiKey = ref('');
-const health = ref({ has_deepseek_key: false });
+const health = ref<ModelSettings>({ has_api_key: false, llm_provider: 'deepseek', model: 'deepseek-v4-flash' });
 const dashboard = ref<Dashboard>({ resumes_total: 0, facts_confirmed: 0, applications_total: 0, follow_up_total: 0, recent_trace: [] });
 const resumes = ref<Resume[]>([]);
 const selectedResumeId = ref<number | null>(null);
@@ -96,7 +97,7 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
 async function refresh() {
   try {
     const [settings, dashboardData, resumeData, applicationData, preferenceData] = await Promise.all([
-      request<{ has_deepseek_key: boolean }>('/settings'),
+      request<typeof health.value>('/settings'),
       request<Dashboard>('/dashboard'),
       request<Resume[]>('/resumes'),
       request<Application[]>('/applications'),
@@ -149,6 +150,26 @@ async function uploadResume(file: File) {
 
 function handleResumeChange(uploadFile: UploadFile) {
   if (uploadFile.raw) uploadResume(uploadFile.raw);
+}
+
+async function uploadJobScreenshot(file: File) {
+  loading.value = true;
+  try {
+    const form = new FormData();
+    form.append('file', file);
+    const result = await request<{ text: string; lines_detected: number }>('/jd/ocr', { method: 'POST', body: form });
+    jdText.value = result.text;
+    matchResult.value = null;
+    ElMessage.success(`已识别 ${result.lines_detected} 行文字，请检查后分析。`);
+  } catch (error) {
+    ElMessage.error(error instanceof Error ? error.message : '截图识别失败。');
+  } finally {
+    loading.value = false;
+  }
+}
+
+function handleJobScreenshotChange(uploadFile: UploadFile) {
+  if (uploadFile.raw) uploadJobScreenshot(uploadFile.raw);
 }
 
 async function saveFact(fact: Fact, status = fact.status) {
@@ -228,7 +249,7 @@ onMounted(refresh);
 
       <div class="sidebar-footer">
         <div class="privacy-note"><KeyRound :size="15" /><span>数据仅保存在本机</span></div>
-        <div class="model-status"><span :class="['status-dot', { ready: health.has_deepseek_key }]" />{{ health.has_deepseek_key ? '模型已配置' : '模型未配置' }}</div>
+        <div class="model-status"><span :class="['status-dot', { ready: health.has_api_key }]" />{{ health.has_api_key ? '模型已配置' : '模型未配置' }}</div>
       </div>
     </aside>
 
@@ -277,7 +298,7 @@ onMounted(refresh);
               <el-empty v-else description="完成一次导入或分析后，活动会显示在这里。" :image-size="72" />
             </article>
             <article class="surface preparation-card"><div class="section-heading"><div><p class="eyebrow">READY CHECK</p><h2>本地准备状态</h2></div><CircleAlert :size="19" /></div>
-              <div class="readiness"><div><span :class="['check-icon', { done: resumes.length > 0 }]"><Check :size="14" /></span><span>已导入简历</span></div><div><span :class="['check-icon', { done: confirmedFacts > 0 }]"><Check :size="14" /></span><span>已确认事实</span></div><div><span :class="['check-icon', { done: health.has_deepseek_key }]"><Check :size="14" /></span><span>已配置模型 Key</span></div></div>
+              <div class="readiness"><div><span :class="['check-icon', { done: resumes.length > 0 }]"><Check :size="14" /></span><span>已导入简历</span></div><div><span :class="['check-icon', { done: confirmedFacts > 0 }]"><Check :size="14" /></span><span>已确认事实</span></div><div><span :class="['check-icon', { done: health.has_api_key }]"><Check :size="14" /></span><span>已配置模型 Key</span></div></div>
               <button class="quiet-link" @click="openView('settings')">打开本地设置 <ArrowUpRight :size="15" /></button>
             </article>
           </section>
@@ -295,13 +316,23 @@ onMounted(refresh);
         </section>
 
         <section v-else-if="currentView === 'analysis'" class="view-stack">
-          <section class="content-grid analysis-entry"><article class="surface jd-surface"><div class="section-heading"><div><p class="eyebrow">JOB DESCRIPTION</p><h2>粘贴岗位原文</h2><p>岗位职责、任职要求与加分项都可直接粘贴。</p></div><ClipboardCheck :size="19" /></div><el-input v-model="jdText" type="textarea" :rows="13" placeholder="粘贴岗位职责、任职要求、加分项等内容" /><div class="analysis-actions"><span>{{ selectedResume ? `使用：${selectedResume.filename}` : '请先选择一份简历' }}</span><el-button type="primary" :icon="Send" :loading="loading" :disabled="!selectedResumeId || jdText.length < 10" @click="runMatch">分析岗位</el-button></div></article><article class="surface analysis-guide"><p class="eyebrow">HOW IT WORKS</p><h2>证据优先，而非猜测</h2><ol><li>解析 JD 的关键词与要求。</li><li>映射到已确认的简历事实。</li><li>展示缺口、偏好冲突与投递建议。</li></ol><p class="guide-note">未确认事实只在没有确认事实时作为临时回退使用。</p></article></section>
+          <section class="content-grid analysis-entry">
+            <article class="surface jd-surface">
+              <div class="section-heading"><div><p class="eyebrow">JOB DESCRIPTION</p><h2>导入或粘贴岗位原文</h2><p>可上传职位截图，本地 OCR 后再由你检查和分析。</p></div><ClipboardCheck :size="19" /></div>
+              <el-upload class="job-screenshot-upload" :auto-upload="false" :show-file-list="false" accept=".png,.jpg,.jpeg,.webp" :on-change="handleJobScreenshotChange">
+                <el-button :icon="Upload" :loading="loading">导入职位截图</el-button>
+              </el-upload>
+              <el-input v-model="jdText" type="textarea" :rows="13" placeholder="粘贴岗位职责、任职要求、加分项等内容" />
+              <div class="analysis-actions"><span>{{ selectedResume ? `使用：${selectedResume.filename}` : '请先选择一份简历' }}</span><el-button type="primary" :icon="Send" :loading="loading" :disabled="!selectedResumeId || jdText.length < 10" @click="runMatch">分析岗位</el-button></div>
+            </article>
+            <article class="surface analysis-guide"><p class="eyebrow">HOW IT WORKS</p><h2>证据优先，而非猜测</h2><ol><li>解析 JD 的关键词与要求。</li><li>映射到已确认的简历事实。</li><li>展示缺口、偏好冲突与投递建议。</li></ol><p class="guide-note">截图仅在本机 OCR；请在分析前校对识别文本。</p></article>
+          </section>
           <section v-if="matchResult" class="match-report"><header class="report-hero"><div><p class="eyebrow">MATCH REPORT</p><h2>{{ matchResult.recommendation }}</h2><p>{{ matchResult.reason }}</p></div><div class="score-ring"><strong>{{ matchResult.score }}</strong><span>匹配度</span></div></header><div class="report-grid"><article class="surface"><div class="section-heading"><h2>可强调的证据</h2><CheckCircle2 :size="19" /></div><ul class="evidence-list"><li v-for="item in matchResult.matched" :key="item.requirement"><strong>{{ item.requirement }}</strong><span v-for="evidence in item.evidence" :key="evidence.fact_code">{{ evidence.fact_code }} · {{ evidence.content }}</span></li><li v-if="!matchResult.matched.length" class="muted">未找到直接匹配的关键词。</li></ul></article><article class="surface"><div class="section-heading"><h2>缺口与偏好</h2><CircleAlert :size="19" /></div><div class="gap-list"><span v-for="missing in matchResult.missing" :key="missing">{{ missing }}</span><p v-if="!matchResult.missing.length">暂无明显关键词缺口。</p></div><el-alert v-if="matchResult.preference_conflicts.length" type="warning" :title="matchResult.preference_conflicts.join('；')" :closable="false" show-icon /></article></div><section class="surface draft-surface"><div class="section-heading"><div><p class="eyebrow">DRAFT & SAVE</p><h2>沟通草稿与投递记录</h2></div></div><el-input v-model="matchResult.greeting" type="textarea" :rows="4" /><el-alert class="fact-alert" :type="matchResult.fact_check.passed ? 'success' : 'warning'" :title="matchResult.fact_check.passed ? '事实审查通过' : matchResult.fact_check.risks.join('；')" :closable="false" show-icon /><div class="draft-form"><el-input v-model="applicationDraft.company" placeholder="公司名称" /><el-input v-model="applicationDraft.position" placeholder="岗位名称" /><el-input v-model="applicationDraft.jd_link" placeholder="JD 链接（可选）" /><el-select v-model="applicationDraft.status"><el-option label="草稿" value="draft" /><el-option label="已投递" value="submitted" /><el-option label="待跟进" value="follow_up" /><el-option label="面试中" value="interview" /></el-select><el-input v-model="applicationDraft.notes" placeholder="备注" /><el-button type="primary" :icon="Save" @click="saveApplication">保存投递记录</el-button></div></section></section>
         </section>
 
         <section v-else-if="currentView === 'applications'" class="view-stack"><section class="surface applications-surface"><div class="section-heading"><div><p class="eyebrow">APPLICATION BOARD</p><h2>所有投递记录</h2><p>记录由你确认保存，Pathlight 不会替你发送申请。</p></div><span class="count-badge">{{ applications.length }}</span></div><el-table :data="applications" class="applications-table" empty-text="分析岗位后，可将草稿保存到这里。"><el-table-column prop="company" label="公司" min-width="150" /><el-table-column prop="position" label="岗位" min-width="160" /><el-table-column label="状态" width="115"><template #default="scope"><el-tag :type="scope.row.status === 'offer' ? 'success' : scope.row.status === 'rejected' ? 'danger' : scope.row.status === 'follow_up' ? 'warning' : 'info'">{{ statusLabel(scope.row.status) }}</el-tag></template></el-table-column><el-table-column prop="resume_version" label="简历版本" min-width="150" /><el-table-column prop="notes" label="备注" min-width="180" /><el-table-column label="JD" width="70"><template #default="scope"><a v-if="scope.row.jd_link" :href="scope.row.jd_link" target="_blank" rel="noreferrer" class="external-link" title="打开 JD"><ArrowUpRight :size="16" /></a></template></el-table-column></el-table></section></section>
 
-        <section v-else class="view-stack settings-view"><section class="surface settings-surface"><div class="section-heading"><div><p class="eyebrow">MODEL CONNECTION</p><h2>DeepSeek API Key</h2><p>用于后续 LLM 分析。密钥不会进入 SQLite、日志或 Git。</p></div><KeyRound :size="20" /></div><div class="settings-key"><el-input v-model="apiKey" type="password" show-password placeholder="输入 DeepSeek API Key" autocomplete="off" /><el-button type="primary" :loading="loading" :disabled="apiKey.length < 12" @click="saveKey">保存 Key</el-button></div><div class="security-callout"><CheckCircle2 :size="18" /><div><strong>{{ health.has_deepseek_key ? '当前系统已配置 Key' : '当前未配置 Key' }}</strong><p>凭据由操作系统的安全凭据库管理，可随时在此替换。</p></div></div></section><section class="surface settings-surface"><div class="section-heading"><div><p class="eyebrow">LOCAL DATA</p><h2>数据边界</h2></div></div><ul class="boundary-list"><li>简历、事实档案、偏好和投递记录保存在本机。</li><li>外部平台操作始终需要你的最终确认。</li><li>当前版本不自动投递、不抓取招聘平台。</li></ul></section></section>
+        <section v-else class="view-stack settings-view"><section class="surface settings-surface"><div class="section-heading"><div><p class="eyebrow">MODEL CONNECTION</p><h2>DeepSeek API Key</h2><p>用于岗位研判与沟通草案。密钥不会进入 SQLite、日志或 Git。</p></div><KeyRound :size="20" /></div><div class="settings-key"><el-input v-model="apiKey" type="password" show-password placeholder="输入 DeepSeek API Key" autocomplete="off" /><el-button type="primary" :loading="loading" :disabled="apiKey.length < 12" @click="saveKey">保存 Key</el-button></div><div class="security-callout"><CheckCircle2 :size="18" /><div><strong>{{ health.has_api_key ? `当前已配置 ${health.model}` : '当前未配置 Key' }}</strong><p>凭据由操作系统的安全凭据库管理；开发期可从本机 .env 读取，均不会写入 SQLite 或 Git。</p></div></div></section><section class="surface settings-surface"><div class="section-heading"><div><p class="eyebrow">LOCAL DATA</p><h2>数据边界</h2></div></div><ul class="boundary-list"><li>简历、事实档案、偏好和投递记录保存在本机。</li><li>外部平台操作始终需要你的最终确认。</li><li>当前版本不自动投递、不抓取招聘平台。</li></ul></section></section>
       </div>
     </section>
   </main>

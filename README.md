@@ -4,6 +4,8 @@
 
 Pathlight helps a single job seeker turn a resume into a user-confirmed fact archive, compare it with a job description, prepare an evidence-aware greeting, and keep a local record of applications. It is intentionally designed as an assistant for decisions and drafts, not an autonomous application bot.
 
+The detailed product workflow, platform boundaries, and development priorities live in [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md).
+
 ## What it does today
 
 - Upload a PDF or DOCX resume and extract editable candidate facts.
@@ -11,7 +13,7 @@ Pathlight helps a single job seeker turn a resume into a user-confirmed fact arc
 - Save job-search preferences locally.
 - Paste a JD to get an explainable keyword-based match result, gaps, recommendation, and greeting draft.
 - Save application drafts and inspect lightweight task traces.
-- Store the DeepSeek API key in the operating system credential store rather than SQLite or source files.
+- Store the optional DeepSeek API key in the operating system credential store rather than SQLite or source files.
 
 ## Stack
 

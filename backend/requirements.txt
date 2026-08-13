@@ -6,6 +6,9 @@ sqlalchemy==2.0.42
 python-multipart==0.0.20
 httpx==0.28.1
 keyring==25.6.0
+openai==1.109.1
+rapidocr==3.9.0
+onnxruntime==1.23.2
 pymupdf==1.26.3
 python-docx==1.2.0
 pytest==8.4.1

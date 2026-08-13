@@ -38,4 +38,8 @@ async def validation_exception_handler(_, exc: RequestValidationError) -> JSONRe
 
 @app.get("/health")
 def health() -> dict:
-    return {"ok": True, "app": settings.app_name, "has_deepseek_key": has_deepseek_key()}
+    return {
+        "ok": True,
+        "app": settings.app_name,
+        "has_api_key": has_deepseek_key() or bool(settings.deepseek_api_key),
+    }

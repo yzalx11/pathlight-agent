@@ -3,6 +3,7 @@ from enum import StrEnum
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
+from app.llm.schemas import JobInsight
 
 class FactCategory(StrEnum):
     GENERAL = "general"
@@ -87,6 +88,11 @@ class ParsedJdRead(PathlightModel):
     confidence: str
 
 
+class OcrRead(PathlightModel):
+    text: str
+    lines_detected: int = Field(ge=0)
+
+
 class MatchPayload(JdPayload):
     resume_id: int = Field(gt=0)
 
@@ -116,6 +122,7 @@ class MatchRead(PathlightModel):
     reason: str
     greeting: str
     fact_check: FactCheckRead
+    llm_insight: JobInsight | None = None
 
 
 class ApplicationPayload(PathlightModel):

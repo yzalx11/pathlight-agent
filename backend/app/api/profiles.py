@@ -2,9 +2,10 @@ from fastapi import APIRouter, Depends, File, UploadFile
 from sqlalchemy.orm import Session
 
 from app.repositories import get_preference, list_resumes
-from app.schemas import FactUpdate, JdPayload, MatchPayload, MatchRead, PreferencePayload, ResumeRead, SavedResponse
+from app.schemas import FactUpdate, JdPayload, MatchPayload, MatchRead, OcrRead, PreferencePayload, ResumeRead, SavedResponse
 from app.services.jd import parse_jd
 from app.services.matching import analyze_match
+from app.services.ocr import extract_job_screenshot
 from app.services.profile import create_resume, save_preferences, update_fact
 from app.database import get_db
 
@@ -42,6 +43,11 @@ def put_preferences(payload: PreferencePayload, db: Session = Depends(get_db)) -
 @router.post("/jd/parse")
 def parse_job_description(payload: JdPayload) -> dict:
     return parse_jd(payload.jd_text)
+
+
+@router.post("/jd/ocr", response_model=OcrRead)
+async def extract_job_screenshot_text(file: UploadFile = File(...)) -> OcrRead:
+    return OcrRead(**(await extract_job_screenshot(file)))
 
 
 @router.post("/matches", response_model=MatchRead)

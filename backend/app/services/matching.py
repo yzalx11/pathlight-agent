@@ -1,6 +1,8 @@
 from fastapi import HTTPException
 from sqlalchemy.orm import Session
 
+from app.llm.deepseek import generate_job_insight
+from app.llm.validators import validate_job_insight
 from app.repositories import get_preference, get_resume
 from app.schemas import MatchPayload
 from app.services.jd import draft_greeting, fact_check_draft, match_resume_to_jd
@@ -24,6 +26,18 @@ def analyze_match(db: Session, payload: MatchPayload) -> dict:
     result["fact_check"] = fact_check_draft(
         result["greeting"], {fact.fact_code for fact in usable_facts}
     )
+    confirmed_facts = [fact for fact in usable_facts if fact.status == "confirmed"]
+    insight = generate_job_insight(
+        payload.jd_text,
+        [
+            {"fact_code": fact.fact_code, "content": fact.content}
+            for fact in confirmed_facts
+        ],
+    )
+    if insight is not None:
+        result["llm_insight"] = validate_job_insight(
+            insight, {fact.fact_code for fact in confirmed_facts}
+        )
     record_trace(db, "match_profile_to_jd", result["recommendation"])
     db.commit()
     return result
