@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue';
+import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
 import type { UploadFile } from 'element-plus';
 import { ElMessage } from 'element-plus';
 import {
@@ -22,6 +22,7 @@ import {
   Upload,
   X,
 } from 'lucide-vue-next';
+import AgentDock from './components/ui/AgentDock.vue';
 
 const API_BASE = 'http://127.0.0.1:8000/api';
 
@@ -103,6 +104,9 @@ const matchResult = ref<MatchResult | null>(null);
 const preferences = ref({ role_direction: '', cities: '', salary_floor: '', industries: '', work_mode: '', notes: '' });
 const applicationDraft = ref({ company: '', position: '', jd_link: '', status: 'draft' as ApplicationStatus, notes: '' });
 const jobDraft = ref({ company: '', title: '', city: '', salary: '', experience: '', education: '', source_link: '', status: 'pending_review' as JobStatus, next_action_at: null as string | null, notes: '', jd_text: '' });
+const pipoGradient = ref('');
+let pipoFrame = 0;
+let pipoStartedAt = 0;
 
 const selectedResume = computed(() => resumes.value.find((resume) => resume.id === selectedResumeId.value));
 const selectedJob = computed(() => jobs.value.find((job) => job.id === selectedJobId.value));
@@ -348,7 +352,51 @@ function statusLabel(status: ApplicationStatus) {
   return ({ draft: '草稿', submitted: '已投递', follow_up: '待跟进', interview: '面试中', offer: '已获 Offer', rejected: '已拒绝' } as const)[status];
 }
 
-onMounted(refresh);
+function handleAgentMessage(message: string) {
+  ElMessage.info(`已收到：${message.slice(0, 36)}${message.length > 36 ? '…' : ''}。岗位上下文问答将在下一步接入。`);
+}
+
+type PipoBlob = { rgb: string; x: number; y: number; fade: number; phase: number; phaseY: number };
+
+function seededPhase(seed: number, index: number) {
+  const mixed = Math.imul(seed ^ (index * 0x9e3779b9), 0x85ebca6b) >>> 0;
+  return (mixed / 4_294_967_296) * Math.PI * 2;
+}
+
+const pipoBlobs: PipoBlob[] = [
+  { rgb: '230, 176, 147', x: 68.1, y: 46.03, fade: 41.1, phase: seededPhase(1, 1), phaseY: seededPhase(11, 1) },
+  { rgb: '163, 206, 255', x: 25.17, y: 75.99, fade: 44.6, phase: seededPhase(1, 2), phaseY: seededPhase(11, 2) },
+  { rgb: '250, 249, 239', x: 53.11, y: 12.71, fade: 66.65, phase: seededPhase(1, 3), phaseY: seededPhase(11, 3) },
+];
+
+const pipoGrain = `url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' width='120' height='120'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/></filter><rect width='100%25' height='100%25' filter='url(%23n)' opacity='0.305'/></svg>")`;
+
+function renderPipo(now: number) {
+  const t = (now - pipoStartedAt) / 1000;
+  const ph = t * 0.86;
+  const amt = 0.72;
+  const dir = 1;
+  const spin = ph * dir;
+  const layers = pipoBlobs.map((blob) => {
+    const x = blob.x + (Math.sin(ph * 0.55 + blob.phase) - Math.sin(blob.phase)) * 14 * amt;
+    const y = blob.y + (Math.sin(ph * 0.43 + blob.phaseY) - Math.sin(blob.phaseY)) * 14 * amt;
+    const fade = blob.fade + (Math.cos(spin * 0.16 + blob.phase) - Math.cos(blob.phase)) * 1.5 * amt;
+    const stopOne = fade * 0.25;
+    const stopTwo = fade * 0.5;
+    const stopThree = fade * 0.75;
+    return `radial-gradient(circle at ${x}% ${y}%, rgba(${blob.rgb}, 1) 0%, rgba(${blob.rgb}, .844) ${stopOne}%, rgba(${blob.rgb}, .5) ${stopTwo}%, rgba(${blob.rgb}, .156) ${stopThree}%, rgba(${blob.rgb}, 0) ${fade}%)`;
+  });
+  pipoGradient.value = `${pipoGrain}, ${layers.join(', ')}`;
+  pipoFrame = window.requestAnimationFrame(renderPipo);
+}
+
+onMounted(() => {
+  void refresh();
+  pipoStartedAt = performance.now();
+  pipoFrame = window.requestAnimationFrame(renderPipo);
+});
+
+onBeforeUnmount(() => window.cancelAnimationFrame(pipoFrame));
 </script>
 
 <template>
@@ -356,7 +404,7 @@ onMounted(refresh);
     <aside class="app-sidebar">
       <div class="brand">
         <span class="brand-mark"><Sparkles :size="19" /></span>
-        <div><strong>Pathlight</strong><span>求职策略工作台</span></div>
+        <div><strong>Pathlight</strong><span>Career command centre</span></div>
       </div>
 
       <nav class="primary-nav" aria-label="主导航">
@@ -371,10 +419,10 @@ onMounted(refresh);
       </div>
     </aside>
 
-    <section class="app-main">
+    <section class="app-main" :style="{ '--pipo-gradient': pipoGradient }">
       <header class="app-header">
         <div class="header-title">
-          <p class="eyebrow">WORKSPACE</p>
+          <p class="eyebrow">PATHLIGHT / LOCAL CAREER OS</p>
           <h1>{{ ({ overview: '今天的求职工作', profile: '简历与事实档案', analysis: '岗位分析', applications: '投递记录', settings: '本地设置' } as const)[currentView] }}</h1>
         </div>
         <div class="header-actions">
@@ -390,7 +438,7 @@ onMounted(refresh);
         <section v-if="currentView === 'overview'" class="view-stack overview">
           <section class="hero-panel">
             <div class="hero-copy">
-              <p class="eyebrow">TODAY</p>
+              <p class="eyebrow">01 / TODAY'S SIGNAL</p>
               <h2>{{ currentStep === 1 ? '先建立可信的简历事实档案' : currentStep === 2 ? '确认可用于沟通的真实经历' : currentStep === 3 ? '导入一个想了解的职位' : '将你的研判转化为下一步行动' }}</h2>
               <p>{{ currentStep === 1 ? '从一份 PDF 或 DOCX 开始。Pathlight 只会使用由你确认过的事实。' : currentStep === 2 ? `当前简历有 ${selectedResume?.facts.length ?? 0} 条候选事实，确认后才会成为匹配与沟通的依据。` : currentStep === 3 ? '粘贴 JD，或一次导入多张 BOSS 职位截图。识别结果始终可先校对。' : '岗位洞察、沟通草稿和本地投递记录已经连成闭环。' }}</p>
               <el-button type="primary" size="large" :icon="currentStep === 1 ? Upload : currentStep === 2 ? Check : currentStep === 3 ? Send : BriefcaseBusiness" @click="openView(currentStep === 1 || currentStep === 2 ? 'profile' : currentStep === 3 ? 'analysis' : 'applications')">
@@ -486,5 +534,6 @@ onMounted(refresh);
         <section v-else class="view-stack settings-view"><section class="surface settings-surface"><div class="section-heading"><div><p class="eyebrow">MODEL CONNECTION</p><h2>DeepSeek API Key</h2><p>用于岗位研判与沟通草案。密钥不会进入 SQLite、日志或 Git。</p></div><KeyRound :size="20" /></div><div class="settings-key"><el-input v-model="apiKey" type="password" show-password placeholder="输入 DeepSeek API Key" autocomplete="off" /><el-button type="primary" :loading="loading" :disabled="apiKey.length < 12" @click="saveKey">保存 Key</el-button></div><div class="security-callout"><CheckCircle2 :size="18" /><div><strong>{{ health.has_api_key ? `当前已配置 ${health.model}` : '当前未配置 Key' }}</strong><p>凭据由操作系统的安全凭据库管理；开发期可从本机 .env 读取，均不会写入 SQLite 或 Git。</p></div></div></section><section class="surface settings-surface"><div class="section-heading"><div><p class="eyebrow">LOCAL DATA</p><h2>数据边界</h2></div></div><ul class="boundary-list"><li>简历、事实档案、偏好和投递记录保存在本机。</li><li>外部平台操作始终需要你的最终确认。</li><li>当前版本不自动投递、不抓取招聘平台。</li></ul></section></section>
       </div>
     </section>
+    <AgentDock @submit="handleAgentMessage" />
   </main>
 </template>
