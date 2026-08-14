@@ -175,6 +175,10 @@ function openView(view: View) {
   currentView.value = view;
 }
 
+function refreshWhenWindowReturns() {
+  void refresh();
+}
+
 async function saveKey() {
   loading.value = true;
   try {
@@ -436,11 +440,15 @@ function renderPipo(now: number) {
 
 onMounted(() => {
   void refresh();
+  window.addEventListener('focus', refreshWhenWindowReturns);
   pipoStartedAt = performance.now();
   pipoFrame = window.requestAnimationFrame(renderPipo);
 });
 
-onBeforeUnmount(() => window.cancelAnimationFrame(pipoFrame));
+onBeforeUnmount(() => {
+  window.removeEventListener('focus', refreshWhenWindowReturns);
+  window.cancelAnimationFrame(pipoFrame);
+});
 </script>
 
 <template>
