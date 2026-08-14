@@ -9,6 +9,7 @@ import {
   CheckCircle2,
   CircleAlert,
   ClipboardCheck,
+  Copy,
   FileText,
   FolderOpen,
   KeyRound,
@@ -88,6 +89,10 @@ type MatchResult = {
     fact_codes: string[];
   } | null;
 };
+type ReplyDraftResult = {
+  drafts: Array<{ label: string; content: string; fact_codes: string[] }>;
+  clarifying_questions: string[];
+};
 
 const currentView = ref<View>('overview');
 const loading = ref(false);
@@ -102,6 +107,8 @@ const selectedJobId = ref<number | null>(null);
 const jobScreenshotFiles = ref<UploadFile[]>([]);
 const jdText = ref('');
 const matchResult = ref<MatchResult | null>(null);
+const assistantResult = ref<ReplyDraftResult | null>(null);
+const assistantLoading = ref(false);
 const preferences = ref({ role_direction: '', cities: '', salary_floor: '', industries: '', work_mode: '', notes: '' });
 const applicationDraft = ref({ company: '', position: '', jd_link: '', status: 'draft' as ApplicationStatus, notes: '' });
 const jobDraft = ref({ company: '', title: '', city: '', salary: '', experience: '', education: '', source_link: '', status: 'pending_review' as JobStatus, next_action_at: null as string | null, notes: '', jd_text: '' });
@@ -225,6 +232,7 @@ async function uploadJobScreenshots(files: File[]) {
     };
     jdText.value = job.jd_text;
     matchResult.value = null;
+    assistantResult.value = null;
     ElMessage.success(`已导入 ${job.screenshots.length} 张截图，请确认职位信息。`);
   } catch (error) {
     ElMessage.error(error instanceof Error ? error.message : '截图识别失败。');
@@ -266,6 +274,7 @@ function loadJobDraft(jobId: number | null) {
   applicationDraft.value.position = job.title;
   applicationDraft.value.jd_link = job.source_link;
   matchResult.value = null;
+  assistantResult.value = null;
 }
 
 function openJobFromAction(jobId: number) {
@@ -328,6 +337,7 @@ async function runMatch() {
     }
     const result = await request<MatchResult>('/matches', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ resume_id: selectedResumeId.value, jd_text: jdText.value }) });
     matchResult.value = result;
+    assistantResult.value = null;
     applicationDraft.value.notes = result.recommendation;
     currentView.value = 'analysis';
     await refresh();
@@ -359,8 +369,35 @@ function statusLabel(status: ApplicationStatus) {
   return ({ draft: '草稿', submitted: '已投递', follow_up: '待跟进', interview: '面试中', offer: '已获 Offer', rejected: '已拒绝' } as const)[status];
 }
 
-function handleAgentMessage(message: string) {
-  ElMessage.info(`已收到：${message.slice(0, 36)}${message.length > 36 ? '…' : ''}。岗位上下文问答将在下一步接入。`);
+async function handleAgentMessage(message: string) {
+  if (!selectedResumeId.value || !selectedJobId.value) {
+    ElMessage.warning('请先在岗位分析页选择一份简历和一个职位。');
+    return;
+  }
+  assistantLoading.value = true;
+  try {
+    const result = await request<ReplyDraftResult>('/assistant/reply-drafts', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ resume_id: selectedResumeId.value, job_id: selectedJobId.value, question: message }),
+    });
+    assistantResult.value = result;
+    currentView.value = 'analysis';
+    ElMessage.success('已生成可核对的回复草案。');
+  } catch (error) {
+    ElMessage.error(error instanceof Error ? error.message : '回复草案生成失败。');
+  } finally {
+    assistantLoading.value = false;
+  }
+}
+
+async function copyReplyDraft(content: string) {
+  try {
+    await navigator.clipboard.writeText(content);
+    ElMessage.success('草案已复制，可按实际情况修改后发送。');
+  } catch {
+    ElMessage.warning('复制失败，请手动选择文本。');
+  }
 }
 
 type PipoBlob = { rgb: string; x: number; y: number; fade: number; phase: number; phaseY: number };
@@ -534,6 +571,17 @@ onBeforeUnmount(() => window.cancelAnimationFrame(pipoFrame));
             <div class="report-grid"><article class="surface"><div class="section-heading"><h2>可强调的证据</h2><CheckCircle2 :size="19" /></div><ul class="evidence-list"><li v-for="item in matchResult.matched" :key="item.requirement"><strong>{{ item.requirement }}</strong><span v-for="evidence in item.evidence" :key="evidence.fact_code">{{ evidence.fact_code }} · {{ evidence.content }}</span></li><li v-if="!matchResult.matched.length" class="muted">未找到直接匹配的关键词。</li></ul></article><article class="surface"><div class="section-heading"><h2>缺口与偏好</h2><CircleAlert :size="19" /></div><div class="gap-list"><span v-for="missing in matchResult.missing" :key="missing">{{ missing }}</span><p v-if="!matchResult.missing.length">暂无明显关键词缺口。</p></div><el-alert v-if="matchResult.preference_conflicts.length" type="warning" :title="matchResult.preference_conflicts.join('；')" :closable="false" show-icon /></article></div>
             <section class="surface draft-surface"><div class="section-heading"><div><p class="eyebrow">DRAFT & SAVE</p><h2>沟通草稿与投递记录</h2></div></div><el-input v-model="matchResult.greeting" type="textarea" :rows="4" /><el-alert class="fact-alert" :type="matchResult.fact_check.passed ? 'success' : 'warning'" :title="matchResult.fact_check.passed ? '事实审查通过' : matchResult.fact_check.risks.join('；')" :closable="false" show-icon /><div class="draft-form"><el-input v-model="applicationDraft.company" placeholder="公司名称" /><el-input v-model="applicationDraft.position" placeholder="岗位名称" /><el-input v-model="applicationDraft.jd_link" placeholder="JD 链接（可选）" /><el-select v-model="applicationDraft.status"><el-option label="草稿" value="draft" /><el-option label="已投递" value="submitted" /><el-option label="待跟进" value="follow_up" /><el-option label="面试中" value="interview" /></el-select><el-input v-model="applicationDraft.notes" placeholder="备注" /><el-button type="primary" :icon="Save" @click="saveApplication">保存投递记录</el-button></div></section>
           </section>
+          <section v-if="assistantResult" class="surface assistant-surface">
+            <div class="section-heading"><div><p class="eyebrow">REPLY DRAFTS</p><h2>招聘方回复草案</h2><p>每一条都绑定了当前简历中已确认的事实；发送前仍由你判断和修改。</p></div><Sparkles :size="19" /></div>
+            <div class="reply-draft-list">
+              <article v-for="draft in assistantResult.drafts" :key="`${draft.label}-${draft.content}`" class="reply-draft-card">
+                <div class="reply-draft-card__heading"><strong>{{ draft.label }}</strong><el-button text :icon="Copy" @click="copyReplyDraft(draft.content)">复制</el-button></div>
+                <el-input v-model="draft.content" type="textarea" :rows="4" />
+                <p>依据：{{ draft.fact_codes.join('、') }}</p>
+              </article>
+            </div>
+            <div v-if="assistantResult.clarifying_questions.length" class="assistant-questions"><strong>还需要你确认</strong><ul><li v-for="question in assistantResult.clarifying_questions" :key="question">{{ question }}</li></ul></div>
+          </section>
         </section>
 
         <section v-else-if="currentView === 'applications'" class="view-stack"><section class="surface applications-surface"><div class="section-heading"><div><p class="eyebrow">APPLICATION BOARD</p><h2>所有投递记录</h2><p>记录由你确认保存，Pathlight 不会替你发送申请。</p></div><span class="count-badge">{{ applications.length }}</span></div><el-table :data="applications" class="applications-table" empty-text="分析岗位后，可将草稿保存到这里。"><el-table-column prop="company" label="公司" min-width="150" /><el-table-column prop="position" label="岗位" min-width="160" /><el-table-column label="状态" width="115"><template #default="scope"><el-tag :type="scope.row.status === 'offer' ? 'success' : scope.row.status === 'rejected' ? 'danger' : scope.row.status === 'follow_up' ? 'warning' : 'info'">{{ statusLabel(scope.row.status) }}</el-tag></template></el-table-column><el-table-column prop="resume_version" label="简历版本" min-width="150" /><el-table-column prop="notes" label="备注" min-width="180" /><el-table-column label="JD" width="70"><template #default="scope"><a v-if="scope.row.jd_link" :href="scope.row.jd_link" target="_blank" rel="noreferrer" class="external-link" title="打开 JD"><ArrowUpRight :size="16" /></a></template></el-table-column></el-table></section></section>
@@ -541,6 +589,6 @@ onBeforeUnmount(() => window.cancelAnimationFrame(pipoFrame));
         <section v-else class="view-stack settings-view"><section class="surface settings-surface"><div class="section-heading"><div><p class="eyebrow">MODEL CONNECTION</p><h2>DeepSeek API Key</h2><p>用于岗位研判与沟通草案。密钥不会进入 SQLite、日志或 Git。</p></div><KeyRound :size="20" /></div><div class="settings-key"><el-input v-model="apiKey" type="password" show-password placeholder="输入 DeepSeek API Key" autocomplete="off" /><el-button type="primary" :loading="loading" :disabled="apiKey.length < 12" @click="saveKey">保存 Key</el-button></div><div class="security-callout"><CheckCircle2 :size="18" /><div><strong>{{ health.has_api_key ? `当前已配置 ${health.model}` : '当前未配置 Key' }}</strong><p>凭据由操作系统的安全凭据库管理；开发期可从本机 .env 读取，均不会写入 SQLite 或 Git。</p></div></div></section><section class="surface settings-surface"><div class="section-heading"><div><p class="eyebrow">LOCAL DATA</p><h2>数据边界</h2></div></div><ul class="boundary-list"><li>简历、事实档案、偏好和投递记录保存在本机。</li><li>外部平台操作始终需要你的最终确认。</li><li>当前版本不自动投递、不抓取招聘平台。</li></ul></section></section>
       </div>
     </section>
-    <AgentDock @submit="handleAgentMessage" />
+    <AgentDock :working="assistantLoading" :idle-status="selectedJob ? `当前：${selectedJob.title || '未命名职位'}` : '选择职位后即可起草回复'" @submit="handleAgentMessage" />
   </main>
 </template>

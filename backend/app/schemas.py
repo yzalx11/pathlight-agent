@@ -125,6 +125,23 @@ class MatchRead(PathlightModel):
     llm_insight: JobInsight | None = None
 
 
+class ReplyDraftPayload(PathlightModel):
+    resume_id: int = Field(gt=0)
+    job_id: int = Field(gt=0)
+    question: str = Field(min_length=2, max_length=2_000)
+
+
+class ReplyDraftRead(PathlightModel):
+    label: str
+    content: str
+    fact_codes: list[str]
+
+
+class ReplyDraftResponse(PathlightModel):
+    drafts: list[ReplyDraftRead]
+    clarifying_questions: list[str] = Field(default_factory=list)
+
+
 class ApplicationPayload(PathlightModel):
     company: str = Field(min_length=1, max_length=255)
     position: str = Field(min_length=1, max_length=255)
