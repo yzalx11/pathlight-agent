@@ -3,7 +3,7 @@ from collections.abc import Sequence
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session, selectinload
 
-from app.models import Application, Fact, Job, Preference, Resume, TraceRun
+from app.models import Application, BrowserImport, Fact, Job, Preference, Resume, TraceRun
 from app.schemas import FactStatus, JobStatus
 
 
@@ -28,6 +28,19 @@ def list_applications(db: Session) -> Sequence[Application]:
 def list_jobs(db: Session) -> Sequence[Job]:
     statement = select(Job).options(selectinload(Job.screenshots)).order_by(Job.created_at.desc())
     return db.scalars(statement).all()
+
+
+def list_browser_imports(db: Session, status: str = "pending") -> Sequence[BrowserImport]:
+    statement = (
+        select(BrowserImport)
+        .where(BrowserImport.status == status)
+        .order_by(BrowserImport.captured_at.desc())
+    )
+    return db.scalars(statement).all()
+
+
+def get_browser_import(db: Session, import_id: int) -> BrowserImport | None:
+    return db.get(BrowserImport, import_id)
 
 
 def get_job(db: Session, job_id: int) -> Job | None:

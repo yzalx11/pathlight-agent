@@ -24,6 +24,7 @@ New-Item -ItemType Directory -Force -Path $outputDir | Out-Null
     --collect-data rapidocr.models `
     --collect-all keyring `
     --collect-all fitz `
+    --collect-submodules websockets `
     --distpath $outputDir `
     --workpath (Join-Path $workDir "build") `
     --specpath $workDir `

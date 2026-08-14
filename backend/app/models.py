@@ -99,6 +99,24 @@ class JobScreenshot(Base):
     job: Mapped[Job] = relationship(back_populates="screenshots")
 
 
+class BrowserImport(Base):
+    __tablename__ = "browser_imports"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    fingerprint: Mapped[str] = mapped_column(String(64), index=True)
+    page_title: Mapped[str] = mapped_column(String(255), default="")
+    source_link: Mapped[str] = mapped_column(String(1024))
+    visible_text: Mapped[str] = mapped_column(Text)
+    company: Mapped[str] = mapped_column(String(255), default="")
+    title: Mapped[str] = mapped_column(String(255), default="")
+    city: Mapped[str] = mapped_column(String(128), default="")
+    salary: Mapped[str] = mapped_column(String(128), default="")
+    experience: Mapped[str] = mapped_column(String(128), default="")
+    education: Mapped[str] = mapped_column(String(128), default="")
+    status: Mapped[str] = mapped_column(String(32), default="pending", index=True)
+    captured_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+
 class TraceRun(Base):
     __tablename__ = "trace_runs"
 

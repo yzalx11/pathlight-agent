@@ -10,7 +10,7 @@ The detailed product workflow, platform boundaries, and development priorities l
 
 - Upload a PDF or DOCX resume and extract editable candidate facts.
 - Import up to eight BOSS job screenshots at once. OCR and original screenshots stay on this device, then become reviewable job drafts.
-- Import the currently visible BOSS job page through a user-triggered browser bridge. The extension previews fields before creating a local job draft.
+- Launch a dedicated recruiting browser, then let Pathlight observe only the visible BOSS job detail page and place it in a local review queue.
 - Track a job from review through communication, follow-up, interview, offer, rejection, or archive. The home screen keeps the next action visible.
 - Confirm, edit, or exclude facts before they are used in a match.
 - Save job-search preferences locally.
@@ -50,13 +50,17 @@ npm run dev
 
 Open `http://127.0.0.1:5173`.
 
-### BOSS browser bridge (development preview)
+### BOSS recruiting browser (development preview)
 
-With the local API or desktop app running, load `browser-extension/` as an unpacked
-extension in Chrome or Edge's extension developer mode. On a BOSS job detail page,
-click the Pathlight extension, review the locally generated preview, then explicitly
-confirm import. The extension reads only the current page's visible text and URL; it
-does not read cookies, account data, chat content, or perform any external action.
+In the Pathlight workbench, click **打开招聘浏览器**. The app launches a dedicated
+Chrome/Edge profile with a local CDP connection; log into BOSS yourself and browse
+job detail pages normally. Pathlight observes only the visible BOSS job detail page,
+adds a deduplicated draft to the local review queue, and waits for your confirmation
+before creating a job record. It never reads cookies, account data, chat content, or
+performs search, scrolling, clicking, messaging, resume sending, or application actions.
+
+`browser-extension/` remains an optional fallback for people who prefer to import a
+single current BOSS page manually from their daily browser.
 
 ### Desktop development
 

@@ -10,9 +10,13 @@ from app.services.jobs import infer_job_metadata
 from app.services.trace import record_trace
 
 
-def _is_supported_job_url(source_link: str) -> bool:
+def is_supported_boss_job_url(source_link: str) -> bool:
     hostname = (urlparse(source_link).hostname or "").lower()
-    return hostname == "zhipin.com" or hostname.endswith(".zhipin.com")
+    path = urlparse(source_link).path.lower()
+    return (
+        (hostname == "zhipin.com" or hostname.endswith(".zhipin.com"))
+        and ("job_detail" in path or "/web/geek/job" in path)
+    )
 
 
 def _normalized_text(visible_text: str) -> str:
@@ -20,7 +24,7 @@ def _normalized_text(visible_text: str) -> str:
 
 
 def build_browser_job_preview(payload: BrowserJobPreviewPayload) -> dict[str, str]:
-    if not _is_supported_job_url(payload.source_link):
+    if not is_supported_boss_job_url(payload.source_link):
         raise HTTPException(
             status_code=422,
             detail="This bridge currently supports a visible BOSS job page only.",

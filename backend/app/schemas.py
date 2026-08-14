@@ -253,6 +253,42 @@ class BrowserJobImportPayload(BrowserJobPreviewPayload):
     education: str = Field(default="", max_length=128)
 
 
+class BrowserImportStatus(StrEnum):
+    PENDING = "pending"
+    CONFIRMED = "confirmed"
+    DISMISSED = "dismissed"
+
+
+class BrowserSessionRead(PathlightModel):
+    chrome_running: bool
+    cdp_available: bool
+    observing: bool = False
+    message: str = ""
+
+
+class BrowserScanRead(PathlightModel):
+    status: str
+    import_id: int | None = None
+    message: str = ""
+
+
+class BrowserImportRead(PathlightModel):
+    id: int
+    page_title: str
+    source_link: str
+    visible_text: str
+    company: str
+    title: str
+    city: str
+    salary: str
+    experience: str
+    education: str
+    status: BrowserImportStatus
+    captured_at: datetime
+
+    model_config = ConfigDict(from_attributes=True)
+
+
 class TraceRead(PathlightModel):
     run_id: str
     task_type: str

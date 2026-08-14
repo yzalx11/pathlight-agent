@@ -17,6 +17,7 @@ class Settings(BaseSettings):
     llm_provider: str = "deepseek"
     deepseek_api_key: str = ""
     deepseek_model: str = "deepseek-v4-flash"
+    browser_debug_port: int = 9222
 
     model_config = SettingsConfigDict(
         env_file=".env", env_file_encoding="utf-8", extra="ignore"

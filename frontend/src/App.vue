@@ -15,6 +15,7 @@ import {
   KeyRound,
   LayoutDashboard,
   ListChecks,
+  MonitorUp,
   Plus,
   Save,
   Send,
@@ -93,6 +94,21 @@ type ReplyDraftResult = {
   drafts: Array<{ label: string; content: string; fact_codes: string[] }>;
   clarifying_questions: string[];
 };
+type BrowserSession = { chrome_running: boolean; cdp_available: boolean; observing: boolean; message: string };
+type BrowserImport = {
+  id: number;
+  page_title: string;
+  source_link: string;
+  visible_text: string;
+  company: string;
+  title: string;
+  city: string;
+  salary: string;
+  experience: string;
+  education: string;
+  status: 'pending' | 'confirmed' | 'dismissed';
+  captured_at: string;
+};
 
 const currentView = ref<View>('overview');
 const loading = ref(false);
@@ -109,6 +125,8 @@ const jdText = ref('');
 const matchResult = ref<MatchResult | null>(null);
 const assistantResult = ref<ReplyDraftResult | null>(null);
 const assistantLoading = ref(false);
+const browserSession = ref<BrowserSession>({ chrome_running: false, cdp_available: false, observing: false, message: '' });
+const browserImports = ref<BrowserImport[]>([]);
 const preferences = ref({ role_direction: '', cities: '', salary_floor: '', industries: '', work_mode: '', notes: '' });
 const applicationDraft = ref({ company: '', position: '', jd_link: '', status: 'draft' as ApplicationStatus, notes: '' });
 const jobDraft = ref({ company: '', title: '', city: '', salary: '', experience: '', education: '', source_link: '', status: 'pending_review' as JobStatus, next_action_at: null as string | null, notes: '', jd_text: '' });
@@ -116,6 +134,8 @@ const pipoGradient = ref('');
 let pipoFrame = 0;
 let pipoStartedAt = 0;
 let desktopConnectionAttempts = 0;
+let browserScanTimer: number | undefined;
+let browserScanInFlight = false;
 
 const selectedResume = computed(() => resumes.value.find((resume) => resume.id === selectedResumeId.value));
 const selectedJob = computed(() => jobs.value.find((job) => job.id === selectedJobId.value));
@@ -146,13 +166,15 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
 
 async function refresh() {
   try {
-    const [settings, dashboardData, resumeData, applicationData, jobData, preferenceData] = await Promise.all([
+    const [settings, dashboardData, resumeData, applicationData, jobData, preferenceData, browserSessionData, browserImportData] = await Promise.all([
       request<typeof health.value>('/settings'),
       request<Dashboard>('/dashboard'),
       request<Resume[]>('/resumes'),
       request<Application[]>('/applications'),
       request<Job[]>('/jobs'),
       request<typeof preferences.value>('/preferences'),
+      request<BrowserSession>('/browser/session'),
+      request<BrowserImport[]>('/browser/imports'),
     ]);
     health.value = settings;
     dashboard.value = dashboardData;
@@ -160,6 +182,8 @@ async function refresh() {
     applications.value = applicationData;
     jobs.value = jobData;
     preferences.value = preferenceData;
+    browserSession.value = browserSessionData;
+    browserImports.value = browserImportData;
     selectedResumeId.value = selectedResumeId.value ?? resumeData[0]?.id ?? null;
   } catch (error) {
     if (desktopMode && desktopConnectionAttempts < 5) {
@@ -177,6 +201,72 @@ function openView(view: View) {
 
 function refreshWhenWindowReturns() {
   void refresh();
+}
+
+function stopBrowserObservation() {
+  if (browserScanTimer !== undefined) window.clearInterval(browserScanTimer);
+  browserScanTimer = undefined;
+}
+
+async function scanRecruitingBrowser() {
+  if (browserScanInFlight || !browserSession.value.cdp_available) return;
+  browserScanInFlight = true;
+  try {
+    const result = await request<{ status: string; import_id: number | null }>('/browser/session/scan', { method: 'POST' });
+    if (result.status === 'captured') {
+      await refresh();
+      ElMessage.success('已读取当前职位页，等待你确认导入。');
+    }
+  } catch (error) {
+    stopBrowserObservation();
+    ElMessage.error(error instanceof Error ? error.message : '招聘浏览器连接已中断。');
+  } finally {
+    browserScanInFlight = false;
+  }
+}
+
+function startBrowserObservation() {
+  if (!browserSession.value.cdp_available || browserScanTimer !== undefined) return;
+  void scanRecruitingBrowser();
+  browserScanTimer = window.setInterval(() => void scanRecruitingBrowser(), 3_000);
+}
+
+async function launchRecruitingBrowser() {
+  loading.value = true;
+  try {
+    browserSession.value = await request<BrowserSession>('/browser/session/launch', { method: 'POST' });
+    startBrowserObservation();
+    ElMessage.success('招聘浏览器已打开，请登录 BOSS 后自行浏览职位。');
+  } catch (error) {
+    ElMessage.error(error instanceof Error ? error.message : '无法启动招聘浏览器。');
+  } finally {
+    loading.value = false;
+  }
+}
+
+async function confirmBrowserImport(browserImport: BrowserImport) {
+  loading.value = true;
+  try {
+    const job = await request<Job>(`/browser/imports/${browserImport.id}/confirm`, { method: 'POST' });
+    await refresh();
+    selectedJobId.value = job.id;
+    loadJobDraft(job.id);
+    currentView.value = 'analysis';
+    ElMessage.success('职位草稿已确认，可继续校对和分析。');
+  } catch (error) {
+    ElMessage.error(error instanceof Error ? error.message : '确认导入失败。');
+  } finally {
+    loading.value = false;
+  }
+}
+
+async function dismissBrowserImport(browserImport: BrowserImport) {
+  try {
+    await request(`/browser/imports/${browserImport.id}/dismiss`, { method: 'POST' });
+    await refresh();
+  } catch (error) {
+    ElMessage.error(error instanceof Error ? error.message : '忽略导入失败。');
+  }
 }
 
 async function saveKey() {
@@ -438,8 +528,9 @@ function renderPipo(now: number) {
   pipoFrame = window.requestAnimationFrame(renderPipo);
 }
 
-onMounted(() => {
-  void refresh();
+onMounted(async () => {
+  await refresh();
+  startBrowserObservation();
   window.addEventListener('focus', refreshWhenWindowReturns);
   pipoStartedAt = performance.now();
   pipoFrame = window.requestAnimationFrame(renderPipo);
@@ -447,6 +538,7 @@ onMounted(() => {
 
 onBeforeUnmount(() => {
   window.removeEventListener('focus', refreshWhenWindowReturns);
+  stopBrowserObservation();
   window.cancelAnimationFrame(pipoFrame);
 });
 </script>
@@ -482,6 +574,7 @@ onBeforeUnmount(() => {
           <el-select v-if="currentView !== 'settings'" v-model="selectedResumeId" class="resume-select" placeholder="选择简历">
             <el-option v-for="resume in resumes" :key="resume.id" :label="resume.filename" :value="resume.id" />
           </el-select>
+          <el-button v-if="currentView !== 'settings'" :icon="MonitorUp" :loading="loading" @click="launchRecruitingBrowser">打开招聘浏览器</el-button>
           <el-button v-if="currentView !== 'settings'" type="primary" :icon="Plus" @click="openView('profile')">导入简历</el-button>
         </div>
       </header>
@@ -548,9 +641,20 @@ onBeforeUnmount(() => {
         </section>
 
         <section v-else-if="currentView === 'analysis'" class="view-stack">
+          <section class="surface browser-session-surface">
+            <div class="section-heading"><div><p class="eyebrow">RECRUITING BROWSER</p><h2>浏览 BOSS，Pathlight 自动整理</h2><p>{{ browserSession.cdp_available ? '正在观察专用招聘浏览器中可见的职位详情页。新页面会先进入待确认队列。' : '启动专用招聘浏览器后，自行登录并浏览；Pathlight 不会搜索、滚动或点击平台按钮。' }}</p></div><MonitorUp :size="20" /></div>
+            <div class="browser-session-actions"><span :class="['browser-session-status', { ready: browserSession.cdp_available }]">{{ browserSession.cdp_available ? '已连接，只读观察中' : '未连接' }}</span><el-button :icon="MonitorUp" :loading="loading" @click="launchRecruitingBrowser">{{ browserSession.cdp_available ? '打开招聘浏览器' : '启动招聘浏览器' }}</el-button></div>
+            <div v-if="browserImports.length" class="browser-import-list">
+              <article v-for="browserImport in browserImports" :key="browserImport.id" class="browser-import-card">
+                <div><p class="eyebrow">WAITING FOR REVIEW</p><h3>{{ browserImport.title || browserImport.page_title }}</h3><p>{{ [browserImport.company || '公司待确认', browserImport.city, browserImport.salary].filter(Boolean).join(' · ') }}</p></div>
+                <p class="browser-import-preview">{{ browserImport.visible_text.slice(0, 220) }}{{ browserImport.visible_text.length > 220 ? '…' : '' }}</p>
+                <div class="browser-import-actions"><a :href="browserImport.source_link" target="_blank" rel="noreferrer">原职位页 <ArrowUpRight :size="14" /></a><el-button size="small" @click="dismissBrowserImport(browserImport)">忽略</el-button><el-button size="small" type="primary" :loading="loading" @click="confirmBrowserImport(browserImport)">确认导入</el-button></div>
+              </article>
+            </div>
+          </section>
           <section class="content-grid analysis-entry">
             <article class="surface jd-surface">
-              <div class="section-heading"><div><p class="eyebrow">JOB DESCRIPTION</p><h2>导入或粘贴岗位原文</h2><p>可由浏览器扩展导入当前 BOSS 职位，或上传截图后在本机 OCR 校对。</p></div><ClipboardCheck :size="19" /></div>
+              <div class="section-heading"><div><p class="eyebrow">JOB DESCRIPTION</p><h2>导入或粘贴岗位原文</h2><p>可由招聘浏览器自动读取当前 BOSS 职位，或上传截图后在本机 OCR 校对。</p></div><ClipboardCheck :size="19" /></div>
               <el-select v-if="jobs.length" v-model="selectedJobId" class="job-select" placeholder="选择已导入职位" @change="loadJobDraft">
                 <el-option v-for="job in jobs" :key="job.id" :label="`${job.title || '未命名职位'} · ${job.company || '待确认公司'}`" :value="job.id" />
               </el-select>
@@ -558,7 +662,7 @@ onBeforeUnmount(() => {
                 <el-button :icon="Upload" :loading="loading">导入 BOSS 职位截图</el-button>
               </el-upload>
               <el-button v-if="jobScreenshotFiles.length" class="job-import-button" :loading="loading" @click="importSelectedJobScreenshots">识别 {{ jobScreenshotFiles.length }} 张截图</el-button>
-              <div v-if="selectedJob" class="job-draft-banner"><span>已创建职位草稿 · {{ selectedJob.screenshots.length }} 张截图</span><span>{{ selectedJob.source === 'boss_screenshot' ? 'BOSS 截图导入' : selectedJob.source === 'browser_bridge' ? '浏览器桥接导入' : '手动导入' }}</span></div>
+              <div v-if="selectedJob" class="job-draft-banner"><span>已创建职位草稿 · {{ selectedJob.screenshots.length }} 张截图</span><span>{{ selectedJob.source === 'boss_screenshot' ? 'BOSS 截图导入' : selectedJob.source === 'browser_cdp' ? '招聘浏览器导入' : selectedJob.source === 'browser_bridge' ? '浏览器扩展导入' : '手动导入' }}</span></div>
               <el-input v-model="jdText" type="textarea" :rows="13" placeholder="粘贴岗位职责、任职要求、加分项等内容" />
               <div class="analysis-actions"><span>{{ selectedResume ? `使用：${selectedResume.filename}` : '请先选择一份简历' }}</span><el-button type="primary" :icon="Send" :loading="loading" :disabled="!selectedResumeId || jdText.length < 10" @click="runMatch">分析岗位</el-button></div>
             </article>

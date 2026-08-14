@@ -2,6 +2,9 @@ import pytest
 from fastapi import HTTPException
 
 from app.schemas import BrowserJobPreviewPayload
+from app.database import SessionLocal, init_db
+from app.models import BrowserImport, Job
+from app.services import browser_imports
 from app.services.browser_bridge import build_browser_job_preview
 
 
@@ -35,3 +38,44 @@ def test_browser_preview_rejects_other_platforms_for_first_release() -> None:
 
     with pytest.raises(HTTPException, match="BOSS"):
         build_browser_job_preview(payload)
+
+
+def test_browser_capture_enters_queue_then_requires_confirmation(monkeypatch) -> None:
+    payload = BrowserJobPreviewPayload(
+        page_title="AI Agent 开发工程师 - 示例公司",
+        source_link="https://www.zhipin.com/web/geek/job?jobId=example",
+        visible_text="""AI Agent 开发工程师
+示例公司
+杭州 10-15K
+职位描述
+参与 AI Agent 应用开发。
+任职要求
+1-3年 本科""",
+    )
+    monkeypatch.setattr(browser_imports, "capture_visible_boss_job", lambda: payload)
+    init_db()
+    db = SessionLocal()
+    browser_import = None
+    job = None
+    try:
+        status, browser_import = browser_imports.scan_visible_browser_job(db)
+        assert status == "captured"
+        assert browser_import is not None
+        assert browser_import.status == "pending"
+
+        duplicate_status, duplicate = browser_imports.scan_visible_browser_job(db)
+        assert duplicate_status == "existing"
+        assert duplicate.id == browser_import.id
+
+        job = browser_imports.confirm_browser_import(db, browser_import.id)
+        assert job.source == "browser_cdp"
+        assert browser_import.status == "confirmed"
+    finally:
+        if job is not None:
+            db.delete(job)
+        if browser_import is not None:
+            stored_import = db.get(BrowserImport, browser_import.id)
+            if stored_import is not None:
+                db.delete(stored_import)
+        db.commit()
+        db.close()
