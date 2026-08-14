@@ -220,6 +220,39 @@ class JobRead(JobPayload):
     model_config = ConfigDict(from_attributes=True)
 
 
+class BrowserJobPreviewPayload(PathlightModel):
+    page_title: str = Field(min_length=1, max_length=255)
+    source_link: str = Field(min_length=1, max_length=1_024)
+    visible_text: str = Field(min_length=30, max_length=30_000)
+
+    @field_validator("source_link")
+    @classmethod
+    def validate_browser_source_link(cls, value: str) -> str:
+        if not value.startswith(("http://", "https://")):
+            raise ValueError("Source link must start with http:// or https://")
+        return value
+
+
+class BrowserJobPreviewRead(PathlightModel):
+    title: str
+    company: str
+    city: str
+    salary: str
+    experience: str
+    education: str
+    source_link: str
+    jd_excerpt: str
+
+
+class BrowserJobImportPayload(BrowserJobPreviewPayload):
+    company: str = Field(default="", max_length=255)
+    title: str = Field(default="", max_length=255)
+    city: str = Field(default="", max_length=128)
+    salary: str = Field(default="", max_length=128)
+    experience: str = Field(default="", max_length=128)
+    education: str = Field(default="", max_length=128)
+
+
 class TraceRead(PathlightModel):
     run_id: str
     task_type: str

@@ -542,7 +542,7 @@ onBeforeUnmount(() => window.cancelAnimationFrame(pipoFrame));
         <section v-else-if="currentView === 'analysis'" class="view-stack">
           <section class="content-grid analysis-entry">
             <article class="surface jd-surface">
-              <div class="section-heading"><div><p class="eyebrow">JOB DESCRIPTION</p><h2>导入或粘贴岗位原文</h2><p>可上传职位截图，本地 OCR 后再由你检查和分析。</p></div><ClipboardCheck :size="19" /></div>
+              <div class="section-heading"><div><p class="eyebrow">JOB DESCRIPTION</p><h2>导入或粘贴岗位原文</h2><p>可由浏览器扩展导入当前 BOSS 职位，或上传截图后在本机 OCR 校对。</p></div><ClipboardCheck :size="19" /></div>
               <el-select v-if="jobs.length" v-model="selectedJobId" class="job-select" placeholder="选择已导入职位" @change="loadJobDraft">
                 <el-option v-for="job in jobs" :key="job.id" :label="`${job.title || '未命名职位'} · ${job.company || '待确认公司'}`" :value="job.id" />
               </el-select>
@@ -550,7 +550,7 @@ onBeforeUnmount(() => window.cancelAnimationFrame(pipoFrame));
                 <el-button :icon="Upload" :loading="loading">导入 BOSS 职位截图</el-button>
               </el-upload>
               <el-button v-if="jobScreenshotFiles.length" class="job-import-button" :loading="loading" @click="importSelectedJobScreenshots">识别 {{ jobScreenshotFiles.length }} 张截图</el-button>
-              <div v-if="selectedJob" class="job-draft-banner"><span>已创建职位草稿 · {{ selectedJob.screenshots.length }} 张截图</span><span>{{ selectedJob.source === 'boss_screenshot' ? 'BOSS 截图导入' : '手动导入' }}</span></div>
+              <div v-if="selectedJob" class="job-draft-banner"><span>已创建职位草稿 · {{ selectedJob.screenshots.length }} 张截图</span><span>{{ selectedJob.source === 'boss_screenshot' ? 'BOSS 截图导入' : selectedJob.source === 'browser_bridge' ? '浏览器桥接导入' : '手动导入' }}</span></div>
               <el-input v-model="jdText" type="textarea" :rows="13" placeholder="粘贴岗位职责、任职要求、加分项等内容" />
               <div class="analysis-actions"><span>{{ selectedResume ? `使用：${selectedResume.filename}` : '请先选择一份简历' }}</span><el-button type="primary" :icon="Send" :loading="loading" :disabled="!selectedResumeId || jdText.length < 10" @click="runMatch">分析岗位</el-button></div>
             </article>

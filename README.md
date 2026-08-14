@@ -10,6 +10,7 @@ The detailed product workflow, platform boundaries, and development priorities l
 
 - Upload a PDF or DOCX resume and extract editable candidate facts.
 - Import up to eight BOSS job screenshots at once. OCR and original screenshots stay on this device, then become reviewable job drafts.
+- Import the currently visible BOSS job page through a user-triggered browser bridge. The extension previews fields before creating a local job draft.
 - Track a job from review through communication, follow-up, interview, offer, rejection, or archive. The home screen keeps the next action visible.
 - Confirm, edit, or exclude facts before they are used in a match.
 - Save job-search preferences locally.
@@ -48,6 +49,14 @@ npm run dev
 ```
 
 Open `http://127.0.0.1:5173`.
+
+### BOSS browser bridge (development preview)
+
+With the local API or desktop app running, load `browser-extension/` as an unpacked
+extension in Chrome or Edge's extension developer mode. On a BOSS job detail page,
+click the Pathlight extension, review the locally generated preview, then explicitly
+confirm import. The extension reads only the current page's visible text and URL; it
+does not read cookies, account data, chat content, or perform any external action.
 
 ### Desktop development
 

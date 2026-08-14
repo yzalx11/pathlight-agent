@@ -1,0 +1,24 @@
+{
+  "manifest_version": 3,
+  "name": "Pathlight Browser Bridge",
+  "version": "0.1.0",
+  "description": "User-triggered import of the currently visible BOSS job page into local Pathlight.",
+  "permissions": ["activeTab", "tabs"],
+  "host_permissions": [
+    "https://zhipin.com/*",
+    "https://*.zhipin.com/*",
+    "http://127.0.0.1:8000/*",
+    "http://127.0.0.1:8001/*"
+  ],
+  "action": {
+    "default_title": "Import visible job into Pathlight",
+    "default_popup": "popup.html"
+  },
+  "content_scripts": [
+    {
+      "matches": ["https://zhipin.com/*", "https://*.zhipin.com/*"],
+      "js": ["content.js"],
+      "run_at": "document_idle"
+    }
+  ]
+}

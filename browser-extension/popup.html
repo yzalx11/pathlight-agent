@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Pathlight Bridge</title>
+    <link rel="stylesheet" href="popup.css" />
+  </head>
+  <body>
+    <main>
+      <header><span class="mark">P</span><div><strong>Pathlight</strong><p>当前 BOSS 职位页导入</p></div></header>
+      <section id="empty-state" class="panel"><p>只读取你主动打开的当前职位页可见文字和链接，不读取账号、Cookie 或聊天内容。</p><button id="capture" type="button">读取并生成预览</button></section>
+      <section id="preview-state" class="panel hidden">
+        <p id="source" class="source"></p>
+        <label>岗位名称<input id="title" autocomplete="off" /></label>
+        <label>公司名称（可稍后补充）<input id="company" autocomplete="off" /></label>
+        <div class="grid"><label>城市<input id="city" autocomplete="off" /></label><label>薪资<input id="salary" autocomplete="off" /></label></div>
+        <div class="grid"><label>经验<input id="experience" autocomplete="off" /></label><label>学历<input id="education" autocomplete="off" /></label></div>
+        <label>正文预览<textarea id="excerpt" readonly></textarea></label>
+        <button id="confirm" type="button">确认导入到本机 Pathlight</button>
+        <button id="restart" class="quiet" type="button">重新读取</button>
+      </section>
+      <p id="status" role="status"></p>
+    </main>
+    <script src="popup.js"></script>
+  </body>
+</html>
